@@ -1,0 +1,30 @@
+{
+    "title": "categories",
+    "type": "object",
+    "properties": {
+        "id": {
+            "type": "integer"
+        },
+        "user_id": {
+            "type": "string"
+        },
+        "name": {
+            "type": "string"
+        },
+        "icon": {
+            "type": "string"
+        },
+        "color": {
+            "type": "string"
+        },
+        "type": {
+            "type": "string",
+            "description": "income or expense"
+        }
+    },
+    "required": [
+        "user_id",
+        "name",
+        "type"
+    ]
+}

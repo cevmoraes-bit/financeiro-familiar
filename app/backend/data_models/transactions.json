@@ -1,0 +1,36 @@
+{
+    "title": "transactions",
+    "type": "object",
+    "properties": {
+        "id": {
+            "type": "integer"
+        },
+        "user_id": {
+            "type": "string"
+        },
+        "type": {
+            "type": "string",
+            "description": "income or expense"
+        },
+        "amount": {
+            "type": "number"
+        },
+        "category": {
+            "type": "string"
+        },
+        "description": {
+            "type": "string"
+        },
+        "date": {
+            "type": "string",
+            "format": "date"
+        }
+    },
+    "required": [
+        "user_id",
+        "type",
+        "amount",
+        "category",
+        "date"
+    ]
+}

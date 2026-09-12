@@ -1,0 +1,30 @@
+# Ambiente / segredos
+.env
+.env.*
+!.env.example
+*.pem
+*.key
+
+# Python
+__pycache__/
+*.pyc
+*.pyo
+.venv/
+venv/
+*.egg-info/
+app/backend/logs/*.log
+
+# Node / frontend
+node_modules/
+app/frontend/dist/
+app/frontend/.vite/
+pnpm-debug.log*
+npm-debug.log*
+
+# SO
+.DS_Store
+__MACOSX/
+
+# IDE
+.vscode/
+.idea/
