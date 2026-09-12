@@ -31,7 +31,7 @@ Repositório de destino: `financeiro-familiar`
 ```bash
 # 1. Crie o repositório vazio em https://github.com/new (nome: financeiro-familiar)
 # 2. Dentro da pasta do projeto:
-git remote add origin https://github.com/<SEU-USUARIO>/financeiro-familiar.git
+git remote add origin https://github.com/financeirophoenixseg-stack/financeiro-familiar.git
 git branch -M main
 git push -u origin main
 ```
