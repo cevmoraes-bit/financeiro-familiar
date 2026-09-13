@@ -25,7 +25,8 @@ import {
 } from '@/components/ui/alert-dialog';
 import { TrendingUp, TrendingDown, Search, Trash2, Filter } from 'lucide-react';
 import { toast } from 'sonner';
-import { client } from '@/lib/api';
+import { supabase } from '@/lib/supabase';
+import { useNavigate } from 'react-router-dom';
 
 interface Transaction {
   id: number;
@@ -38,7 +39,8 @@ interface Transaction {
 }
 
 const Transactions = () => {
-  const { user, loading: authLoading, login } = useAuth();
+  const { user, loading: authLoading } = useAuth();
+  const navigate = useNavigate();
   const [transactions, setTransactions] = useState<Transaction[]>([]);
   const [loadingData, setLoadingData] = useState(true);
   const [searchTerm, setSearchTerm] = useState('');
@@ -49,12 +51,14 @@ const Transactions = () => {
   const fetchTransactions = useCallback(async () => {
     try {
       setLoadingData(true);
-      const response = await client.entities.transactions.query({
-        query: {},
-        sort: '-date',
-        limit: 500,
-      });
-      setTransactions(response?.data?.items || []);
+      const { data, error } = await supabase
+        .from('transactions')
+        .select('*')
+        .order('date', { ascending: false })
+        .limit(500);
+
+      if (error) throw error;
+      setTransactions((data as Transaction[]) || []);
     } catch (err) {
       console.error('Error fetching transactions:', err);
     } finally {
@@ -71,12 +75,17 @@ const Transactions = () => {
   const handleDelete = async () => {
     if (!deleteId) return;
     try {
-      await client.entities.transactions.delete({ id: String(deleteId) });
+      const { error } = await supabase
+        .from('transactions')
+        .delete()
+        .eq('id', deleteId);
+      if (error) throw error;
       toast.success('Transação excluída');
       setDeleteId(null);
       fetchTransactions();
-    } catch (err: any) {
-      toast.error(err?.message || 'Erro ao excluir');
+    } catch (err) {
+      const message = err instanceof Error ? err.message : 'Erro ao excluir';
+      toast.error(message);
     }
   };
 
@@ -96,7 +105,7 @@ const Transactions = () => {
       <div className="min-h-screen bg-background flex flex-col items-center justify-center gap-4 dark p-6">
         <p className="text-muted-foreground">Faça login para ver suas transações</p>
         <button 
-          onClick={login}
+          onClick={() => navigate('/login')}
           className="px-6 py-2 bg-primary text-primary-foreground rounded-lg font-medium cursor-pointer hover:opacity-90 transition-opacity"
         >
           Entrar

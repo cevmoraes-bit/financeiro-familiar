@@ -5,24 +5,22 @@ import React, {
   useEffect,
   ReactNode,
 } from 'react';
-import { client } from '../lib/api';
+import type { Session, User as SupabaseUser } from '@supabase/supabase-js';
+import { supabase } from '../lib/supabase';
 
 interface User {
   id: string;
   email: string;
-  name?: string;
-  role: string;
-  last_login?: string;
 }
 
 interface AuthContextType {
   user: User | null;
+  session: Session | null;
   loading: boolean;
   error: string | null;
-  login: () => void;
-  logout: () => void;
-  refetch: () => Promise<void>;
-  isAdmin: boolean;
+  signInWithPassword: (email: string, password: string) => Promise<void>;
+  signUpWithPassword: (email: string, password: string) => Promise<void>;
+  logout: () => Promise<void>;
 }
 
 const AuthContext = createContext<AuthContextType | null>(null);
@@ -39,48 +37,71 @@ interface AuthProviderProps {
   children: ReactNode;
 }
 
+const toUser = (u: SupabaseUser | null | undefined): User | null =>
+  u ? { id: u.id, email: u.email ?? '' } : null;
+
 export const AuthProvider: React.FC<AuthProviderProps> = ({ children }) => {
+  const [session, setSession] = useState<Session | null>(null);
   const [user, setUser] = useState<User | null>(null);
   const [loading, setLoading] = useState(true);
   const [error, setError] = useState<string | null>(null);
 
-  const checkAuthStatus = async () => {
-    try {
-      setLoading(true);
-      setError(null);
-      const res = await client.auth.me();
-      if (res?.data) {
-        setUser(res.data as User);
-      } else {
-        setUser(null);
-      }
-    } catch {
-      setUser(null);
-    } finally {
+  useEffect(() => {
+    supabase.auth.getSession().then(({ data }) => {
+      setSession(data.session);
+      setUser(toUser(data.session?.user));
       setLoading(false);
+    });
+
+    const { data: listener } = supabase.auth.onAuthStateChange(
+      (_event, newSession) => {
+        setSession(newSession);
+        setUser(toUser(newSession?.user));
+        setLoading(false);
+      }
+    );
+
+    return () => {
+      listener.subscription.unsubscribe();
+    };
+  }, []);
+
+  const signInWithPassword = async (email: string, password: string) => {
+    setError(null);
+    const { error: signInError } = await supabase.auth.signInWithPassword({
+      email,
+      password,
+    });
+    if (signInError) {
+      setError(signInError.message);
+      throw signInError;
     }
   };
 
-  const login = () => {
-    client.auth.toLogin();
+  const signUpWithPassword = async (email: string, password: string) => {
+    setError(null);
+    const { error: signUpError } = await supabase.auth.signUp({
+      email,
+      password,
+    });
+    if (signUpError) {
+      setError(signUpError.message);
+      throw signUpError;
+    }
   };
 
-  const logout = () => {
-    client.auth.logout();
+  const logout = async () => {
+    await supabase.auth.signOut();
   };
-
-  useEffect(() => {
-    checkAuthStatus();
-  }, []);
 
   const value: AuthContextType = {
     user,
+    session,
     loading,
     error,
-    login,
+    signInWithPassword,
+    signUpWithPassword,
     logout,
-    refetch: checkAuthStatus,
-    isAdmin: user?.role === 'admin',
   };
 
   return <AuthContext.Provider value={value}>{children}</AuthContext.Provider>;

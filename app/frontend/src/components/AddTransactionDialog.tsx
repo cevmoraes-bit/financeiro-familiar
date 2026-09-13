@@ -18,7 +18,8 @@ import {
 } from '@/components/ui/select';
 import { Plus } from 'lucide-react';
 import { toast } from 'sonner';
-import { client } from '@/lib/api';
+import { supabase } from '@/lib/supabase';
+import { useAuth } from '@/contexts/AuthContext';
 
 const DEFAULT_CATEGORIES = {
   expense: [
@@ -44,6 +45,7 @@ interface AddTransactionDialogProps {
 }
 
 const AddTransactionDialog = ({ onSuccess }: AddTransactionDialogProps) => {
+  const { user } = useAuth();
   const [open, setOpen] = useState(false);
   const [type, setType] = useState<'expense' | 'income'>('expense');
   const [amount, setAmount] = useState('');
@@ -68,24 +70,31 @@ const AddTransactionDialog = ({ onSuccess }: AddTransactionDialogProps) => {
       return;
     }
 
+    if (!user) {
+      toast.error('Você precisa estar logado');
+      return;
+    }
+
     setLoading(true);
     try {
-      await client.entities.transactions.create({
-        data: {
-          type,
-          amount: numAmount,
-          category,
-          description: description || undefined,
-          date,
-        },
+      const { error } = await supabase.from('transactions').insert({
+        user_id: user.id,
+        type,
+        amount: numAmount,
+        category,
+        description: description || null,
+        date,
       });
-      
+
+      if (error) throw error;
+
       toast.success(type === 'expense' ? 'Despesa registrada!' : 'Receita registrada!');
       setOpen(false);
       resetForm();
       onSuccess();
-    } catch (err: any) {
-      toast.error(err?.message || 'Erro ao salvar transação');
+    } catch (err) {
+      const message = err instanceof Error ? err.message : 'Erro ao salvar transação';
+      toast.error(message);
     } finally {
       setLoading(false);
     }

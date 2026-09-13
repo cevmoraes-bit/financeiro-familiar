@@ -1,55 +1,74 @@
-# Deploy — Financeiro Familiar
+# Deploy — Financeiro Familiar (FinControl)
 
-## 1. Banco de dados (Supabase)
+## Arquitetura atual
 
-✅ Já provisionado: projeto **"Financeiro Familiar"** (ref `yeybotynmizuurwfayqj`, região `ca-central-1`),
-com o schema completo aplicado (`contas`, `cartoes`, `categorias`, `lancamentos`, `metas`,
-`orcamento`, `contas_pagar`, `valores_receber`, `documentos`, `compras_cartao`) e RLS habilitado
-em todas as tabelas.
+O frontend (React + Vite) fala **diretamente com o Supabase** — autenticação
+(email/senha) e dados (tabela `transactions`) via `@supabase/supabase-js`.
+Não há mais dependência do Atoms Cloud (SDK anterior) nem do backend FastAPI
+em `app/backend` — esse backend fica no repositório como referência/futuro
+uso, mas o app publicado hoje não o chama.
 
-Passos restantes:
-1. Pegue a senha do banco em **Supabase Dashboard > Project Settings > Database > Connection string**
-   (modo **Transaction pooler**, porta 6543).
-2. Copie `app/backend/.env.example` para `app/backend/.env` e preencha `DATABASE_URL` com a senha
-   e o restante das variáveis (`JWT_SECRET_KEY`, etc). **Nunca commite o `.env`.**
-3. Como o schema já existe no banco, normalmente não é preciso rodar `alembic upgrade head` de novo —
-   só rode se quiser conferir/alinhar o estado das migrations:
-   ```bash
-   cd app/backend
-   pip install -r requirements.txt
-   alembic upgrade head
-   ```
-4. ⚠️ Aviso do linter de segurança do Supabase: a tabela `categorias` tem RLS habilitado mas
-   nenhuma policy criada — hoje ela fica inacessível via API até uma policy ser adicionada
-   (a menos que o acesso seja só via `service_role`, que ignora RLS). Vale revisar antes de ir
-   para produção.
+## 1. Supabase (já provisionado)
 
-## 2. GitHub
+- Projeto: **Financeiro Familiar** (ref `yeybotynmizuurwfayqj`, região `ca-central-1`)
+- Tabela `transactions` criada com RLS (cada usuário só vê/edita as próprias
+  transações), colunas: `id, user_id, type, amount, category, description, date, created_at`
+- Auth por email/senha habilitada (padrão do Supabase)
+- URL: `https://yeybotynmizuurwfayqj.supabase.co`
 
-Repositório de destino: `financeiro-familiar`
+Nada a fazer aqui, a não ser revisar em **Authentication > Settings** se você
+quer exigir confirmação de email antes do primeiro login (ativado por padrão).
 
-```bash
-# 1. Crie o repositório vazio em https://github.com/new (nome: financeiro-familiar)
-# 2. Dentro da pasta do projeto:
-git remote add origin https://github.com/financeirophoenixseg-stack/financeiro-familiar.git
-git branch -M main
-git push -u origin main
+## 2. Variáveis de ambiente do frontend
+
+Arquivo `app/frontend/.env` (já criado, não commitado — veja `.env.example`):
+
 ```
+VITE_SUPABASE_URL=https://yeybotynmizuurwfayqj.supabase.co
+VITE_SUPABASE_ANON_KEY=sb_publishable__SdnHZZv7JE-5JeZO8d5vw_kjcQfoN8
+```
+
+Essa chave é a **publicável (anon)** — segura para expor no frontend; o
+acesso aos dados é controlado pelas policies de RLS, não pelo sigilo da chave.
 
 ## 3. Rodando localmente
 
 ```bash
-# Backend
-cd app/backend
-pip install -r requirements.txt
-uvicorn main:app --reload --port 8000
-
-# Frontend
 cd app/frontend
 pnpm install
 pnpm dev
 ```
 
-## Variáveis de ambiente
+⚠️ Não consegui rodar `pnpm install` / `pnpm build` no ambiente onde preparei
+este projeto (sem acesso à internet), então revisei manualmente todas as
+importações e referências trocadas, mas o build real ainda não foi validado
+por uma máquina com rede. Rode `pnpm build` localmente antes do deploy para
+confirmar que fecha sem erros.
 
-Veja `app/backend/.env.example` para a lista completa.
+## 4. GitHub
+
+Repositório: `financeirophoenixseg-stack/financeiro-familiar`
+
+```bash
+git add -A
+git commit -m "Reescreve frontend para usar Supabase diretamente"
+git push origin main
+```
+
+## 5. Vercel
+
+1. Em vercel.com, **Add New > Project** e importe o repositório
+   `financeirophoenixseg-stack/financeiro-familiar`.
+2. **Root Directory**: `app/frontend`
+3. **Framework Preset**: Vite
+4. **Build Command**: `pnpm build` (ou deixe o padrão detectado)
+5. **Output Directory**: `dist`
+6. Em **Environment Variables**, adicione:
+   - `VITE_SUPABASE_URL` = `https://yeybotynmizuurwfayqj.supabase.co`
+   - `VITE_SUPABASE_ANON_KEY` = `sb_publishable__SdnHZZv7JE-5JeZO8d5vw_kjcQfoN8`
+7. Deploy.
+
+Não tenho um conector de Vercel com permissão de criar deploy (o que existe
+no meu ambiente só consulta projetos/deployments existentes), então esse
+passo também precisa ser feito por você — mas com tudo já configurado acima,
+é só apontar e clicar em Deploy.

@@ -5,7 +5,7 @@ import { Button } from '@/components/ui/button';
 import { TrendingUp, Shield, Zap, PieChart } from 'lucide-react';
 
 const Index = () => {
-  const { user, loading, login } = useAuth();
+  const { user, loading } = useAuth();
   const navigate = useNavigate();
 
   useEffect(() => {
@@ -13,6 +13,8 @@ const Index = () => {
       navigate('/dashboard');
     }
   }, [user, loading, navigate]);
+
+  const goToLogin = () => navigate('/login');
 
   if (loading) {
     return (
@@ -36,7 +38,7 @@ const Index = () => {
             </div>
             <span className="font-semibold text-lg text-foreground">FinControl</span>
           </div>
-          <Button onClick={login} variant="outline" size="sm" className="cursor-pointer">
+          <Button onClick={goToLogin} variant="outline" size="sm" className="cursor-pointer">
             Entrar
           </Button>
         </header>
@@ -56,7 +58,7 @@ const Index = () => {
             </div>
 
             <Button 
-              onClick={login} 
+              onClick={goToLogin} 
               size="lg" 
               className="w-full sm:w-auto px-8 py-6 text-base font-medium cursor-pointer"
             >

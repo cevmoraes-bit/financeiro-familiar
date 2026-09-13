@@ -19,6 +19,11 @@ const AppLayout = ({ children }: AppLayoutProps) => {
   const navigate = useNavigate();
   const location = useLocation();
 
+  const handleLogout = async () => {
+    await logout();
+    navigate('/');
+  };
+
   const navItems = [
     { path: '/dashboard', label: 'Dashboard', icon: LayoutDashboard },
     { path: '/transactions', label: 'Transações', icon: List },
@@ -49,7 +54,7 @@ const AppLayout = ({ children }: AppLayoutProps) => {
                 variant="ghost" 
                 size="icon" 
                 className="cursor-pointer h-8 w-8"
-                onClick={logout}
+                onClick={handleLogout}
               >
                 <LogOut className="w-4 h-4" />
               </Button>

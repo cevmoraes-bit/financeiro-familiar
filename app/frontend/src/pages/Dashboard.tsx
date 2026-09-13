@@ -12,7 +12,7 @@ import {
   ArrowUpRight,
   ArrowDownRight 
 } from 'lucide-react';
-import { client } from '@/lib/api';
+import { supabase } from '@/lib/supabase';
 
 interface Transaction {
   id: number;
@@ -46,7 +46,7 @@ const CATEGORY_COLORS: Record<string, string> = {
 };
 
 const Dashboard = () => {
-  const { user, loading: authLoading, login } = useAuth();
+  const { user, loading: authLoading } = useAuth();
   const navigate = useNavigate();
   const [transactions, setTransactions] = useState<Transaction[]>([]);
   const [loadingData, setLoadingData] = useState(true);
@@ -55,20 +55,19 @@ const Dashboard = () => {
     try {
       setLoadingData(true);
       const now = new Date();
-      const startOfMonth = new Date(now.getFullYear(), now.getMonth(), 1).toISOString().split('T')[0];
-      
-      const response = await client.entities.transactions.query({
-        query: {},
-        sort: '-date',
-        limit: 500,
-      });
-      
-      const allTransactions: Transaction[] = response?.data?.items || [];
-      // Filter current month transactions
-      const monthTransactions = allTransactions.filter(
-        (t) => t.date >= startOfMonth
-      );
-      setTransactions(monthTransactions);
+      const startOfMonth = new Date(now.getFullYear(), now.getMonth(), 1)
+        .toISOString()
+        .split('T')[0];
+
+      const { data, error } = await supabase
+        .from('transactions')
+        .select('*')
+        .gte('date', startOfMonth)
+        .order('date', { ascending: false })
+        .limit(500);
+
+      if (error) throw error;
+      setTransactions((data as Transaction[]) || []);
     } catch (err) {
       console.error('Error fetching transactions:', err);
     } finally {
@@ -101,7 +100,7 @@ const Dashboard = () => {
       <div className="min-h-screen bg-background flex flex-col items-center justify-center gap-4 dark p-6">
         <p className="text-muted-foreground">Faça login para acessar o dashboard</p>
         <button 
-          onClick={login}
+          onClick={() => navigate('/login')}
           className="px-6 py-2 bg-primary text-primary-foreground rounded-lg font-medium cursor-pointer hover:opacity-90 transition-opacity"
         >
           Entrar
