@@ -15,7 +15,7 @@ import {
   SelectTrigger,
   SelectValue,
 } from '@/components/ui/select';
-import { UploadCloud, FileText, AlertTriangle, ArrowLeft } from 'lucide-react';
+import { UploadCloud, FileText, AlertTriangle, ArrowLeft, Camera } from 'lucide-react';
 import { toast } from 'sonner';
 import { supabase } from '@/lib/supabase';
 import { parseFile } from '@/lib/import/parsers';
@@ -95,6 +95,7 @@ const Import = () => {
   const navigate = useNavigate();
   const { expenseCategories, incomeCategories } = useCategories();
   const fileInputRef = useRef<HTMLInputElement>(null);
+  const cameraInputRef = useRef<HTMLInputElement>(null);
 
   const [stage, setStage] = useState<Stage>('upload');
   const [busy, setBusy] = useState(false);
@@ -135,6 +136,7 @@ const Import = () => {
     setForm(null);
     setMultiRows([]);
     if (fileInputRef.current) fileInputRef.current.value = '';
+    if (cameraInputRef.current) cameraInputRef.current.value = '';
   };
 
   const handleFile = async (file: File) => {
@@ -284,43 +286,73 @@ const Import = () => {
         </p>
 
         {stage === 'upload' && (
-          <Card
-            className={`p-8 border-2 border-dashed transition-colors cursor-pointer ${
-              dragOver ? 'border-primary bg-primary/5' : 'border-border'
-            }`}
-            onDragOver={(e) => {
-              e.preventDefault();
-              setDragOver(true);
-            }}
-            onDragLeave={() => setDragOver(false)}
-            onDrop={onDrop}
-            onClick={() => fileInputRef.current?.click()}
-          >
-            <input
-              ref={fileInputRef}
-              type="file"
-              className="hidden"
-              onChange={(e) => {
-                const file = e.target.files?.[0];
-                if (file) handleFile(file);
-              }}
-            />
-            <div className="flex flex-col items-center gap-3 text-center">
-              <div className="w-14 h-14 rounded-full bg-primary/10 flex items-center justify-center">
-                <UploadCloud className="w-7 h-7 text-primary" />
-              </div>
-              {busy ? (
-                <p className="text-sm text-muted-foreground">Processando "{fileName}"...</p>
-              ) : (
-                <>
-                  <p className="font-medium text-foreground">Arraste um arquivo aqui ou toque para selecionar</p>
+          <div className="space-y-3">
+            <Card
+              className="p-6 border-2 border-primary/40 hover:border-primary transition-colors cursor-pointer"
+              onClick={() => cameraInputRef.current?.click()}
+            >
+              <input
+                ref={cameraInputRef}
+                type="file"
+                accept="image/*"
+                capture="environment"
+                className="hidden"
+                onChange={(e) => {
+                  const file = e.target.files?.[0];
+                  if (file) handleFile(file);
+                }}
+              />
+              <div className="flex items-center gap-4">
+                <div className="w-14 h-14 rounded-full bg-primary/10 flex items-center justify-center flex-shrink-0">
+                  <Camera className="w-7 h-7 text-primary" />
+                </div>
+                <div className="text-left">
+                  <p className="font-medium text-foreground">Tirar foto agora</p>
                   <p className="text-xs text-muted-foreground">
-                    Boleto, comprovante, fatura, extrato bancário (OFX), planilha (XLSX) ou CSV — qualquer extensão
+                    Nota do abastecimento, cupom do mercado, boleto — direto da câmera do celular
                   </p>
-                </>
-              )}
-            </div>
-          </Card>
+                </div>
+              </div>
+            </Card>
+
+            <Card
+              className={`p-8 border-2 border-dashed transition-colors cursor-pointer ${
+                dragOver ? 'border-primary bg-primary/5' : 'border-border'
+              }`}
+              onDragOver={(e) => {
+                e.preventDefault();
+                setDragOver(true);
+              }}
+              onDragLeave={() => setDragOver(false)}
+              onDrop={onDrop}
+              onClick={() => fileInputRef.current?.click()}
+            >
+              <input
+                ref={fileInputRef}
+                type="file"
+                className="hidden"
+                onChange={(e) => {
+                  const file = e.target.files?.[0];
+                  if (file) handleFile(file);
+                }}
+              />
+              <div className="flex flex-col items-center gap-3 text-center">
+                <div className="w-14 h-14 rounded-full bg-primary/10 flex items-center justify-center">
+                  <UploadCloud className="w-7 h-7 text-primary" />
+                </div>
+                {busy ? (
+                  <p className="text-sm text-muted-foreground">Processando "{fileName}"...</p>
+                ) : (
+                  <>
+                    <p className="font-medium text-foreground">Ou arraste um arquivo aqui / toque para selecionar</p>
+                    <p className="text-xs text-muted-foreground">
+                      Foto da galeria, PDF, extrato bancário (OFX), planilha (XLSX) ou CSV — qualquer extensão
+                    </p>
+                  </>
+                )}
+              </div>
+            </Card>
+          </div>
         )}
 
         {warning && stage !== 'upload' && (
