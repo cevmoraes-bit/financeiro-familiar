@@ -250,10 +250,15 @@ const Transactions = () => {
                     <div className="min-w-0 flex-1">
                       <div className="flex items-center gap-1.5 flex-wrap">
                         <p className="text-sm font-medium text-foreground truncate">{t.category}</p>
-                        {t.status === 'pending' && (
+                        {t.status === 'pending' ? (
                           <Badge variant={isOverdue(t) ? 'destructive' : 'outline'} className="text-[10px] px-1.5 py-0">
                             {isOverdue(t) ? 'Vencida' : 'Pendente'}
                           </Badge>
+                        ) : (
+                          <span className="inline-flex items-center gap-1 text-[11px] font-medium text-emerald-500">
+                            <span className="w-1.5 h-1.5 rounded-full bg-emerald-500" />
+                            {t.type === 'expense' ? 'Paga' : 'Recebida'}
+                          </span>
                         )}
                       </div>
                       <p className="text-xs text-muted-foreground truncate">
@@ -269,7 +274,9 @@ const Transactions = () => {
                         {t.type === 'income' ? '+' : '-'}{formatCurrency(t.amount)}
                       </p>
                       <p className="text-xs text-muted-foreground">
-                        {t.status === 'pending' && t.due_date ? `vence ${formatDate(t.due_date)}` : formatDate(t.date)}
+                        {t.status === 'pending' && t.due_date
+                          ? `vence ${formatDate(t.due_date)}`
+                          : `pago em ${formatDate(t.date)}`}
                       </p>
                     </div>
                     {t.status === 'pending' && (

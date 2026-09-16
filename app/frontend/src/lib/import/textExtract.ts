@@ -22,7 +22,7 @@ const DATE_LABELS =
 
 const BENEFICIARY_LABELS = /(?:benefici[aá]rio|cedente|favorecido|recebedor)\s*[:\-]?\s*([^\n\r]{3,80})/i;
 
-const PAYER_LABELS = /(?:pagador|sacado|devedor|tomador)\s*[:\-]?\s*([^\n\r]{3,80})/i;
+const PAYER_LABELS = /(?:pagador|sacado|devedor|tomador|cliente)\s*[:\-]?\s*([^\n\r]{3,80})/i;
 
 const ANY_CURRENCY = /(?:r\$\s*)?(\d{1,3}(?:\.\d{3})*,\d{2})/g;
 const ANY_DATE = /(\d{2}\/\d{2}\/\d{4})/g;

@@ -149,7 +149,7 @@ const Dashboard = () => {
 
   // Recent transactions (last 5)
   const recentTransactions = [...transactions]
-    .sort((a, b) => new Date(b.created_at).getTime() - new Date(a.created_at).getTime())
+    .sort((a, b) => new Date(b.date).getTime() - new Date(a.date).getTime())
     .slice(0, 5);
 
   const formatCurrency = (value: number) => {
@@ -329,9 +329,15 @@ const Dashboard = () => {
                         </div>
                         <div>
                           <p className="text-sm font-medium text-foreground">{t.category}</p>
-                          <p className="text-xs text-muted-foreground">
-                            {t.description || new Date(t.date).toLocaleDateString('pt-BR')}
-                          </p>
+                          <div className="flex items-center gap-1.5">
+                            <span className="inline-flex items-center gap-1 text-[11px] font-medium text-emerald-500">
+                              <span className="w-1.5 h-1.5 rounded-full bg-emerald-500" />
+                              {t.type === 'expense' ? 'Paga' : 'Recebida'}
+                            </span>
+                            <span className="text-xs text-muted-foreground">
+                              em {formatDate(t.date)}
+                            </span>
+                          </div>
                         </div>
                       </div>
                       <span className={`text-sm font-semibold ${

@@ -362,7 +362,7 @@ const Import = () => {
             </div>
 
             <div className="space-y-2">
-              <Label>Pagador</Label>
+              <Label>Pagador / Cliente</Label>
               <Input value={form.payer} onChange={(e) => setForm({ ...form, payer: e.target.value })} placeholder="Ex: Seu nome" />
             </div>
 
