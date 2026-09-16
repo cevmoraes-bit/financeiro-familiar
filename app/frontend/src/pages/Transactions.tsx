@@ -24,12 +24,13 @@ import {
   AlertDialogHeader,
   AlertDialogTitle,
 } from '@/components/ui/alert-dialog';
-import { TrendingUp, TrendingDown, Search, Trash2, Filter, Pencil, CheckCircle2, ChevronDown, ChevronUp, ShoppingCart, Fuel } from 'lucide-react';
+import { TrendingUp, TrendingDown, Search, Trash2, Filter, Pencil, CheckCircle2, ChevronDown, ChevronUp, ShoppingCart, Fuel, Download } from 'lucide-react';
 import { toast } from 'sonner';
 import { supabase } from '@/lib/supabase';
 import { useNavigate } from 'react-router-dom';
 import { Transaction, TransactionItem } from '@/lib/transactions';
 import { useVehicles } from '@/hooks/useVehicles';
+import { getReceiptUrl } from '@/lib/receipts';
 
 const Transactions = () => {
   const { user, loading: authLoading } = useAuth();
@@ -132,6 +133,27 @@ const Transactions = () => {
     }
   };
 
+  const handleViewAttachment = async (path: string) => {
+    try {
+      const url = await getReceiptUrl(path);
+      if (!url) throw new Error('URL indisponível');
+      const response = await fetch(url);
+      if (!response.ok) throw new Error('Falha ao baixar o arquivo');
+      const blob = await response.blob();
+      const objectUrl = URL.createObjectURL(blob);
+      const link = document.createElement('a');
+      link.href = objectUrl;
+      link.download = path.split('/').pop() || 'comprovante';
+      document.body.appendChild(link);
+      link.click();
+      link.remove();
+      URL.revokeObjectURL(objectUrl);
+    } catch (err) {
+      console.error('Error downloading attachment:', err);
+      toast.error('Não foi possível baixar o comprovante');
+    }
+  };
+
   if (authLoading) {
     return (
       <div className="min-h-screen bg-background flex items-center justify-center dark">
@@ -193,8 +215,8 @@ const Transactions = () => {
     return date.toLocaleDateString('pt-BR', { month: 'long', year: 'numeric' });
   };
 
-  const isOverdue = (t: Transaction) =>
-    t.status === 'pending' && !!t.due_date && t.due_date < new Date().toISOString().split('T')[0];
+  const todayIso = new Date().toISOString().split('T')[0];
+  const isOverdue = (t: Transaction) => t.status === 'pending' && !!t.due_date && t.due_date < todayIso;
 
   return (
     <AppLayout>
@@ -286,9 +308,13 @@ const Transactions = () => {
                       <div className="flex items-center gap-1.5 flex-wrap">
                         <p className="text-sm font-medium text-foreground truncate">{t.category}</p>
                         {t.status === 'pending' ? (
-                          <Badge variant={isOverdue(t) ? 'destructive' : 'outline'} className="text-[10px] px-1.5 py-0">
-                            {isOverdue(t) ? 'Vencida' : 'Pendente'}
-                          </Badge>
+                          isOverdue(t) ? (
+                            <Badge variant="destructive" className="text-[10px] px-1.5 py-0">Vencida</Badge>
+                          ) : (
+                            <Badge className="text-[10px] px-1.5 py-0 bg-amber-500/15 text-amber-500 border-amber-500/40 hover:bg-amber-500/15">
+                              {t.due_date === todayIso ? 'Vence hoje' : 'A vencer'}
+                            </Badge>
+                          )
                         ) : (
                           <span className="inline-flex items-center gap-1 text-[11px] font-medium text-emerald-500">
                             <span className="w-1.5 h-1.5 rounded-full bg-emerald-500" />
@@ -316,7 +342,15 @@ const Transactions = () => {
                       }`}>
                         {t.type === 'income' ? '+' : '-'}{formatCurrency(t.amount)}
                       </p>
-                      <p className="text-xs text-muted-foreground">
+                      <p
+                        className={`text-xs ${
+                          t.status === 'pending'
+                            ? isOverdue(t)
+                              ? 'text-red-500 font-medium'
+                              : 'text-amber-500 font-medium'
+                            : 'text-muted-foreground'
+                        }`}
+                      >
                         {t.status === 'pending' && t.due_date
                           ? `vence ${formatDate(t.due_date)}`
                           : `pago em ${formatDate(t.date)}`}
@@ -331,6 +365,17 @@ const Transactions = () => {
                         onClick={() => handleMarkPaid(t)}
                       >
                         <CheckCircle2 className="w-4 h-4" />
+                      </Button>
+                    )}
+                    {t.attachment_url && (
+                      <Button
+                        variant="ghost"
+                        size="icon"
+                        className="h-8 w-8 cursor-pointer text-muted-foreground hover:text-primary"
+                        title="Baixar comprovante"
+                        onClick={() => handleViewAttachment(t.attachment_url as string)}
+                      >
+                        <Download className="w-3.5 h-3.5" />
                       </Button>
                     )}
                     <AddTransactionDialog

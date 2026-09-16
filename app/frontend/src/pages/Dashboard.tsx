@@ -254,6 +254,8 @@ const Dashboard = () => {
 
   const todayIso = new Date().toISOString().split('T')[0];
   const isOverdue = (t: Transaction) => !!t.due_date && t.due_date < todayIso;
+  const overdueBills = pendingBills.filter((t) => isOverdue(t));
+  const dueTodayBills = pendingBills.filter((t) => t.due_date === todayIso);
 
   const currentMonth = new Date().toLocaleDateString('pt-BR', { month: 'long', year: 'numeric' });
 
@@ -276,6 +278,34 @@ const Dashboard = () => {
           </div>
         ) : (
           <>
+            {/* Overdue / due-today alerts */}
+            {overdueBills.length > 0 && (
+              <div className="rounded-xl border border-red-500/40 bg-red-500/10 p-4 flex items-start gap-3">
+                <CalendarClock className="w-5 h-5 text-red-500 flex-shrink-0 mt-0.5" />
+                <div>
+                  <p className="text-sm font-semibold text-red-500">
+                    {overdueBills.length} conta{overdueBills.length > 1 ? 's' : ''} vencida
+                    {overdueBills.length > 1 ? 's' : ''}
+                  </p>
+                  <p className="text-xs text-red-500/80 mt-0.5">
+                    Regularize o quanto antes para evitar juros e multas.
+                  </p>
+                </div>
+              </div>
+            )}
+            {dueTodayBills.length > 0 && (
+              <div className="rounded-xl border border-amber-500/40 bg-amber-500/10 p-4 flex items-start gap-3">
+                <CalendarClock className="w-5 h-5 text-amber-500 flex-shrink-0 mt-0.5" />
+                <div>
+                  <p className="text-sm font-semibold text-amber-500">
+                    {dueTodayBills.length} conta{dueTodayBills.length > 1 ? 's' : ''} vence
+                    {dueTodayBills.length > 1 ? 'm' : ''} hoje
+                  </p>
+                  <p className="text-xs text-amber-500/80 mt-0.5">Lembrete: pague hoje para não atrasar.</p>
+                </div>
+              </div>
+            )}
+
             {/* Balance Card */}
             <Card className="p-6 bg-gradient-to-br from-primary/10 to-primary/5 border-primary/20">
               <div className="flex items-center gap-3 mb-2">
@@ -333,8 +363,12 @@ const Dashboard = () => {
                           <p className="text-sm font-medium text-foreground truncate">
                             {t.beneficiary || t.payer || t.category}
                           </p>
-                          <p className={`text-xs ${isOverdue(t) ? 'text-destructive' : 'text-muted-foreground'}`}>
-                            {t.due_date ? `Vence ${formatDate(t.due_date)}` : 'Sem data'}
+                          <p className={`text-xs font-medium ${isOverdue(t) ? 'text-red-500' : 'text-amber-500'}`}>
+                            {t.due_date
+                              ? t.due_date === todayIso
+                                ? 'Vence hoje'
+                                : `Vence ${formatDate(t.due_date)}`
+                              : 'Sem data'}
                           </p>
                         </div>
                       </div>
