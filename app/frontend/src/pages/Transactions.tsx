@@ -24,13 +24,14 @@ import {
   AlertDialogHeader,
   AlertDialogTitle,
 } from '@/components/ui/alert-dialog';
-import { TrendingUp, TrendingDown, Search, Trash2, Filter, Pencil, CheckCircle2, ChevronDown, ChevronUp, ShoppingCart, Fuel, Download } from 'lucide-react';
+import { TrendingUp, TrendingDown, Search, Trash2, Filter, Pencil, CheckCircle2, ChevronDown, ChevronUp, ShoppingCart, Fuel, FileDown } from 'lucide-react';
 import { toast } from 'sonner';
 import { supabase } from '@/lib/supabase';
 import { useNavigate } from 'react-router-dom';
 import { Transaction, TransactionItem } from '@/lib/transactions';
 import { useVehicles } from '@/hooks/useVehicles';
-import { getReceiptUrl } from '@/lib/receipts';
+import TransactionAttachments from '@/components/TransactionAttachments';
+import { exportTransactionsPdf } from '@/lib/reports/transactionsPdf';
 
 const Transactions = () => {
   const { user, loading: authLoading } = useAuth();
@@ -46,6 +47,7 @@ const Transactions = () => {
   const [filterStatus, setFilterStatus] = useState<string>('all');
   const [filterMonth, setFilterMonth] = useState<string>('all');
   const [deleteId, setDeleteId] = useState<number | null>(null);
+  const [exportingPdf, setExportingPdf] = useState(false);
 
   const fetchTransactions = useCallback(async () => {
     try {
@@ -133,27 +135,6 @@ const Transactions = () => {
     }
   };
 
-  const handleViewAttachment = async (path: string) => {
-    try {
-      const url = await getReceiptUrl(path);
-      if (!url) throw new Error('URL indisponível');
-      const response = await fetch(url);
-      if (!response.ok) throw new Error('Falha ao baixar o arquivo');
-      const blob = await response.blob();
-      const objectUrl = URL.createObjectURL(blob);
-      const link = document.createElement('a');
-      link.href = objectUrl;
-      link.download = path.split('/').pop() || 'comprovante';
-      document.body.appendChild(link);
-      link.click();
-      link.remove();
-      URL.revokeObjectURL(objectUrl);
-    } catch (err) {
-      console.error('Error downloading attachment:', err);
-      toast.error('Não foi possível baixar o comprovante');
-    }
-  };
-
   if (authLoading) {
     return (
       <div className="min-h-screen bg-background flex items-center justify-center dark">
@@ -218,10 +199,38 @@ const Transactions = () => {
   const todayIso = new Date().toISOString().split('T')[0];
   const isOverdue = (t: Transaction) => t.status === 'pending' && !!t.due_date && t.due_date < todayIso;
 
+  const handleExportPdf = async () => {
+    if (filteredTransactions.length === 0) {
+      toast.error('Nenhuma transação para exportar com os filtros atuais');
+      return;
+    }
+    const parts: string[] = [];
+    parts.push(filterMonth === 'all' ? 'Todos os meses' : getMonthLabel(filterMonth));
+    if (filterType !== 'all') parts.push(filterType === 'expense' ? 'Despesas' : 'Receitas');
+    if (filterStatus !== 'all') parts.push(filterStatus === 'paid' ? 'Pagas/recebidas' : 'Pendentes');
+    setExportingPdf(true);
+    try {
+      await exportTransactionsPdf(filteredTransactions, {
+        title: 'Relatório de Transações',
+        periodLabel: `Filtro: ${parts.join(' · ')}`,
+      });
+    } catch (err) {
+      console.error('Error exporting PDF:', err);
+      toast.error('Erro ao gerar o PDF');
+    } finally {
+      setExportingPdf(false);
+    }
+  };
+
   return (
     <AppLayout>
       <div className="space-y-4">
-        <h1 className="text-2xl font-bold text-foreground">Transações</h1>
+        <div className="flex items-center justify-between">
+          <h1 className="text-2xl font-bold text-foreground">Transações</h1>
+          <Button variant="outline" size="sm" className="cursor-pointer" onClick={handleExportPdf} disabled={exportingPdf}>
+            <FileDown className="w-3.5 h-3.5 mr-1.5" /> {exportingPdf ? 'Gerando...' : 'Exportar PDF'}
+          </Button>
+        </div>
 
         {/* Search and Filters */}
         <div className="space-y-3">
@@ -367,17 +376,7 @@ const Transactions = () => {
                         <CheckCircle2 className="w-4 h-4" />
                       </Button>
                     )}
-                    {t.attachment_url && (
-                      <Button
-                        variant="ghost"
-                        size="icon"
-                        className="h-8 w-8 cursor-pointer text-muted-foreground hover:text-primary"
-                        title="Baixar comprovante"
-                        onClick={() => handleViewAttachment(t.attachment_url as string)}
-                      >
-                        <Download className="w-3.5 h-3.5" />
-                      </Button>
-                    )}
+                    <TransactionAttachments transaction={t} onUpdated={fetchTransactions} />
                     <AddTransactionDialog
                       transaction={t}
                       onSuccess={fetchTransactions}

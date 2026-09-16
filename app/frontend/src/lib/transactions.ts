@@ -21,6 +21,7 @@ export interface Transaction {
   status: 'paid' | 'pending';
   source: 'manual' | 'import';
   attachment_url?: string | null;
+  payment_proof_url?: string | null;
   vehicle_id?: number | null;
   liters?: number | null;
   price_per_liter?: number | null;
