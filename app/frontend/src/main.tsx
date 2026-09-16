@@ -18,4 +18,14 @@ if ('serviceWorker' in navigator && import.meta.env.PROD) {
   window.addEventListener('load', () => {
     navigator.serviceWorker.register('/sw.js').catch(() => {});
   });
+
+  // When a new service worker takes over (a new deploy was published),
+  // reload once so the tab picks up the new app shell instead of staying
+  // on stale JS from before the update.
+  let hasReloaded = false;
+  navigator.serviceWorker.addEventListener('controllerchange', () => {
+    if (hasReloaded) return;
+    hasReloaded = true;
+    window.location.reload();
+  });
 }
