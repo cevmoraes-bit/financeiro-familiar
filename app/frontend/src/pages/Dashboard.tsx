@@ -15,10 +15,12 @@ import {
   CalendarClock,
   CheckCircle2,
   ShoppingCart,
+  Fuel,
 } from 'lucide-react';
 import { supabase } from '@/lib/supabase';
 import { toast } from 'sonner';
 import { Transaction } from '@/lib/transactions';
+import { Vehicle } from '@/lib/vehicles';
 
 interface CategorySummary {
   name: string;
@@ -32,12 +34,22 @@ interface ProductSummary {
   total: number;
 }
 
+interface FuelSummary {
+  vehicleId: number;
+  vehicleName: string;
+  totalSpent: number;
+  totalLiters: number;
+  avgPricePerLiter: number;
+  kmPerLiter?: number;
+}
+
 const Dashboard = () => {
   const { user, loading: authLoading } = useAuth();
   const navigate = useNavigate();
   const [transactions, setTransactions] = useState<Transaction[]>([]);
   const [pendingBills, setPendingBills] = useState<Transaction[]>([]);
   const [topProducts, setTopProducts] = useState<ProductSummary[]>([]);
+  const [fuelSummaries, setFuelSummaries] = useState<FuelSummary[]>([]);
   const [loadingData, setLoadingData] = useState(true);
 
   const fetchData = useCallback(async () => {
@@ -70,6 +82,54 @@ const Dashboard = () => {
       const paidTransactions = (paidRes.data as Transaction[]) || [];
       setTransactions(paidTransactions);
       setPendingBills((pendingRes.data as Transaction[]) || []);
+
+      const fuelTransactions = paidTransactions.filter((t) => t.vehicle_id);
+      if (fuelTransactions.length > 0) {
+        const { data: vehicles, error: vehiclesError } = await supabase
+          .from('vehicles')
+          .select('*')
+          .in('id', [...new Set(fuelTransactions.map((t) => t.vehicle_id as number))]);
+        if (vehiclesError) throw vehiclesError;
+
+        const byVehicle = new Map<number, Transaction[]>();
+        fuelTransactions.forEach((t) => {
+          const id = t.vehicle_id as number;
+          if (!byVehicle.has(id)) byVehicle.set(id, []);
+          byVehicle.get(id)!.push(t);
+        });
+
+        const summaries: FuelSummary[] = [];
+        byVehicle.forEach((txs, vehicleId) => {
+          const sorted = [...txs].sort((a, b) => a.date.localeCompare(b.date));
+          const totalSpent = sorted.reduce((sum, t) => sum + t.amount, 0);
+          const totalLiters = sorted.reduce((sum, t) => sum + (t.liters || 0), 0);
+          const vehicleName = (vehicles as Vehicle[] | null)?.find((v) => v.id === vehicleId)?.name || 'Veículo';
+
+          let kmPerLiter: number | undefined;
+          const withOdometer = sorted.filter((t) => t.odometer_km !== null && t.odometer_km !== undefined);
+          if (withOdometer.length >= 2) {
+            const first = withOdometer[0];
+            const last = withOdometer[withOdometer.length - 1];
+            const kmDriven = (last.odometer_km as number) - (first.odometer_km as number);
+            const litersAfterFirst = withOdometer.slice(1).reduce((sum, t) => sum + (t.liters || 0), 0);
+            if (kmDriven > 0 && litersAfterFirst > 0) {
+              kmPerLiter = kmDriven / litersAfterFirst;
+            }
+          }
+
+          summaries.push({
+            vehicleId,
+            vehicleName,
+            totalSpent,
+            totalLiters,
+            avgPricePerLiter: totalLiters > 0 ? totalSpent / totalLiters : 0,
+            kmPerLiter,
+          });
+        });
+        setFuelSummaries(summaries.sort((a, b) => b.totalSpent - a.totalSpent));
+      } else {
+        setFuelSummaries([]);
+      }
 
       if (paidTransactions.length > 0) {
         const { data: items, error: itemsError } = await supabase
@@ -325,6 +385,31 @@ const Dashboard = () => {
                             backgroundColor: cat.color,
                           }}
                         />
+                      </div>
+                    </div>
+                  ))}
+                </div>
+              </Card>
+            )}
+
+            {/* Fuel tracking per vehicle */}
+            {fuelSummaries.length > 0 && (
+              <Card className="p-5">
+                <div className="flex items-center gap-2 mb-4">
+                  <Fuel className="w-4 h-4 text-amber-500" />
+                  <h2 className="text-sm font-semibold text-foreground">Abastecimentos do mês</h2>
+                </div>
+                <div className="space-y-4">
+                  {fuelSummaries.map((f) => (
+                    <div key={f.vehicleId} className="space-y-1.5">
+                      <div className="flex items-center justify-between">
+                        <span className="text-sm font-medium text-foreground">{f.vehicleName}</span>
+                        <span className="text-sm font-semibold text-red-500">{formatCurrency(f.totalSpent)}</span>
+                      </div>
+                      <div className="flex flex-wrap gap-x-4 gap-y-1 text-xs text-muted-foreground">
+                        {f.totalLiters > 0 && <span>{f.totalLiters.toFixed(1)} L</span>}
+                        {f.avgPricePerLiter > 0 && <span>média {formatCurrency(f.avgPricePerLiter)}/L</span>}
+                        {f.kmPerLiter !== undefined && <span>{f.kmPerLiter.toFixed(1)} km/L</span>}
                       </div>
                     </div>
                   ))}

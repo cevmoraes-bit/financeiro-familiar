@@ -14,6 +14,9 @@ export interface ParsedBill {
   type?: 'expense' | 'income';
   alreadyPaid?: boolean;
   items?: ParsedItem[];
+  liters?: number;
+  pricePerLiter?: number;
+  fuelType?: string;
 }
 
 export interface ParsedFileResult {

@@ -13,6 +13,7 @@ export interface Category {
 export const DEFAULT_CATEGORIES: Array<Pick<Category, 'name' | 'type' | 'icon' | 'color'>> = [
   { name: 'Alimentação', type: 'expense', icon: '🍽️', color: '#f97316' },
   { name: 'Transporte', type: 'expense', icon: '🚗', color: '#3b82f6' },
+  { name: 'Combustível', type: 'expense', icon: '⛽', color: '#eab308' },
   { name: 'Moradia', type: 'expense', icon: '🏠', color: '#8b5cf6' },
   { name: 'Saúde', type: 'expense', icon: '💊', color: '#10b981' },
   { name: 'Lazer', type: 'expense', icon: '🎮', color: '#ec4899' },
@@ -38,7 +39,8 @@ export const CATEGORY_KEYWORDS: Array<{ match: RegExp; category: string; type: '
   { match: /restaurante|lanchonete|ifood|delivery|padaria/i, category: 'Alimentação', type: 'expense' },
   { match: /farmacia|drogaria|hospital|clinica|laborat[oó]rio|plano\sde\ssaude/i, category: 'Saúde', type: 'expense' },
   { match: /escola|faculdade|universidade|mensalidade\sescolar|curso/i, category: 'Educação', type: 'expense' },
-  { match: /uber|99\s|combustivel|posto|estacionamento|pedagio/i, category: 'Transporte', type: 'expense' },
+  { match: /uber|99\s|estacionamento|pedagio/i, category: 'Transporte', type: 'expense' },
+  { match: /combustivel|posto|gasolina|etanol|alcool|diesel|litros?\b/i, category: 'Combustível', type: 'expense' },
   { match: /fatura\scartao|cartao\sde\scredito|nubank|inter\scard|itaucard/i, category: 'Cartão de Crédito', type: 'expense' },
   { match: /cinema|streaming|netflix|spotify|academia/i, category: 'Lazer', type: 'expense' },
   { match: /salario|holerite|folha\sde\spagamento/i, category: 'Salário', type: 'income' },

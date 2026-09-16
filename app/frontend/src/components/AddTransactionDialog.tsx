@@ -21,6 +21,7 @@ import { toast } from 'sonner';
 import { supabase } from '@/lib/supabase';
 import { useAuth } from '@/contexts/AuthContext';
 import { useCategories } from '@/hooks/useCategories';
+import { useVehicles } from '@/hooks/useVehicles';
 import { Transaction } from '@/lib/transactions';
 
 interface AddTransactionDialogProps {
@@ -34,6 +35,7 @@ const todayStr = () => new Date().toISOString().split('T')[0];
 const AddTransactionDialog = ({ onSuccess, transaction, trigger }: AddTransactionDialogProps) => {
   const { user } = useAuth();
   const { expenseCategories, incomeCategories } = useCategories();
+  const { vehicles } = useVehicles();
   const isEdit = !!transaction;
   const [open, setOpen] = useState(false);
   const [type, setType] = useState<'expense' | 'income'>(transaction?.type || 'expense');
@@ -45,9 +47,24 @@ const AddTransactionDialog = ({ onSuccess, transaction, trigger }: AddTransactio
   const [dueDate, setDueDate] = useState(transaction?.due_date || transaction?.date || todayStr());
   const [beneficiary, setBeneficiary] = useState(transaction?.beneficiary || '');
   const [payer, setPayer] = useState(transaction?.payer || '');
+  const [vehicleId, setVehicleId] = useState(transaction?.vehicle_id ? String(transaction.vehicle_id) : '');
+  const [liters, setLiters] = useState(transaction?.liters ? String(transaction.liters) : '');
+  const [pricePerLiter, setPricePerLiter] = useState(
+    transaction?.price_per_liter ? String(transaction.price_per_liter) : ''
+  );
+  const [odometerKm, setOdometerKm] = useState(transaction?.odometer_km ? String(transaction.odometer_km) : '');
   const [loading, setLoading] = useState(false);
 
   const categories = type === 'expense' ? expenseCategories : incomeCategories;
+  const isFuel = category === 'Combustível';
+
+  const applyLitersAndPrice = (newLiters: string, newPrice: string) => {
+    const litersNum = parseFloat(newLiters.replace(',', '.'));
+    const priceNum = parseFloat(newPrice.replace(',', '.'));
+    if (Number.isFinite(litersNum) && Number.isFinite(priceNum) && litersNum > 0 && priceNum > 0) {
+      setAmount((litersNum * priceNum).toFixed(2));
+    }
+  };
 
   const resetForm = () => {
     if (isEdit) return;
@@ -60,6 +77,10 @@ const AddTransactionDialog = ({ onSuccess, transaction, trigger }: AddTransactio
     setBeneficiary('');
     setPayer('');
     setType('expense');
+    setVehicleId('');
+    setLiters('');
+    setPricePerLiter('');
+    setOdometerKm('');
   };
 
   const handleSubmit = async (e: React.FormEvent) => {
@@ -87,6 +108,11 @@ const AddTransactionDialog = ({ onSuccess, transaction, trigger }: AddTransactio
       return;
     }
 
+    if (isFuel && !vehicleId) {
+      toast.error('Selecione o veículo deste abastecimento');
+      return;
+    }
+
     const match = categories.find((c) => c.name === category);
 
     setLoading(true);
@@ -102,6 +128,10 @@ const AddTransactionDialog = ({ onSuccess, transaction, trigger }: AddTransactio
         status,
         beneficiary: beneficiary || null,
         payer: payer || null,
+        vehicle_id: isFuel && vehicleId ? Number(vehicleId) : null,
+        liters: isFuel && liters ? parseFloat(liters.replace(',', '.')) : null,
+        price_per_liter: isFuel && pricePerLiter ? parseFloat(pricePerLiter.replace(',', '.')) : null,
+        odometer_km: isFuel && odometerKm ? parseFloat(odometerKm.replace(',', '.')) : null,
       };
 
       if (isEdit && transaction) {
@@ -201,6 +231,68 @@ const AddTransactionDialog = ({ onSuccess, transaction, trigger }: AddTransactio
               </SelectContent>
             </Select>
           </div>
+
+          {/* Fuel details */}
+          {isFuel && (
+            <div className="space-y-3 rounded-lg border border-border p-3">
+              <div className="space-y-2">
+                <Label htmlFor="vehicle">Veículo</Label>
+                <Select value={vehicleId} onValueChange={setVehicleId}>
+                  <SelectTrigger id="vehicle" className="cursor-pointer">
+                    <SelectValue placeholder={vehicles.length === 0 ? 'Cadastre um veículo em Categorias' : 'Selecione o veículo'} />
+                  </SelectTrigger>
+                  <SelectContent>
+                    {vehicles.map((v) => (
+                      <SelectItem key={v.id} value={String(v.id)} className="cursor-pointer">
+                        {v.name}
+                      </SelectItem>
+                    ))}
+                  </SelectContent>
+                </Select>
+              </div>
+              <div className="grid grid-cols-2 gap-3">
+                <div className="space-y-2">
+                  <Label htmlFor="liters">Litros</Label>
+                  <Input
+                    id="liters"
+                    type="number"
+                    step="0.001"
+                    placeholder="Ex: 32,45"
+                    value={liters}
+                    onChange={(e) => {
+                      setLiters(e.target.value);
+                      applyLitersAndPrice(e.target.value, pricePerLiter);
+                    }}
+                  />
+                </div>
+                <div className="space-y-2">
+                  <Label htmlFor="pricePerLiter">Preço/L</Label>
+                  <Input
+                    id="pricePerLiter"
+                    type="number"
+                    step="0.001"
+                    placeholder="Ex: 5,89"
+                    value={pricePerLiter}
+                    onChange={(e) => {
+                      setPricePerLiter(e.target.value);
+                      applyLitersAndPrice(liters, e.target.value);
+                    }}
+                  />
+                </div>
+              </div>
+              <div className="space-y-2">
+                <Label htmlFor="odometer">Odômetro (km) — opcional</Label>
+                <Input
+                  id="odometer"
+                  type="number"
+                  step="1"
+                  placeholder="Ex: 45210"
+                  value={odometerKm}
+                  onChange={(e) => setOdometerKm(e.target.value)}
+                />
+              </div>
+            </div>
+          )}
 
           {/* Status */}
           <div className="space-y-2">

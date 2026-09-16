@@ -2,6 +2,7 @@ import { useRef, useState } from 'react';
 import { useNavigate } from 'react-router-dom';
 import { useAuth } from '@/contexts/AuthContext';
 import { useCategories } from '@/hooks/useCategories';
+import { useVehicles } from '@/hooks/useVehicles';
 import AppLayout from '@/components/AppLayout';
 import { Card } from '@/components/ui/card';
 import { Button } from '@/components/ui/button';
@@ -45,6 +46,10 @@ interface SingleForm {
   description: string;
   categoryName: string;
   items: ItemRow[];
+  vehicleId: string;
+  liters: string;
+  pricePerLiter: string;
+  odometerKm: string;
 }
 
 let itemIdCounter = 0;
@@ -90,6 +95,10 @@ const buildSingleForm = (bill: ParsedBill, extraText: string): SingleForm => {
       unitPrice: item.unitPrice !== undefined ? String(item.unitPrice) : '',
       totalPrice: String(item.totalPrice),
     })),
+    vehicleId: '',
+    liters: bill.liters !== undefined ? String(bill.liters) : '',
+    pricePerLiter: bill.pricePerLiter !== undefined ? String(bill.pricePerLiter) : '',
+    odometerKm: '',
   };
 };
 
@@ -115,6 +124,7 @@ const Import = () => {
   const { user, loading: authLoading } = useAuth();
   const navigate = useNavigate();
   const { expenseCategories, incomeCategories } = useCategories();
+  const { vehicles } = useVehicles();
   const fileInputRef = useRef<HTMLInputElement>(null);
   const cameraInputRef = useRef<HTMLInputElement>(null);
 
@@ -218,6 +228,11 @@ const Import = () => {
       toast.error('Informe o valor de cada item ou remova a linha vazia');
       return;
     }
+    const isFuel = form.categoryName === 'Combustível';
+    if (isFuel && !form.vehicleId) {
+      toast.error('Selecione o veículo deste abastecimento');
+      return;
+    }
 
     setBusy(true);
     try {
@@ -238,6 +253,10 @@ const Import = () => {
           status: form.status,
           source: 'import',
           attachment_url: attachmentPath,
+          vehicle_id: isFuel && form.vehicleId ? Number(form.vehicleId) : null,
+          liters: isFuel && form.liters ? parseFloat(form.liters.replace(',', '.')) : null,
+          price_per_liter: isFuel && form.pricePerLiter ? parseFloat(form.pricePerLiter.replace(',', '.')) : null,
+          odometer_km: isFuel && form.odometerKm ? parseFloat(form.odometerKm.replace(',', '.')) : null,
         })
         .select('id')
         .single();
@@ -492,6 +511,58 @@ const Import = () => {
                 </SelectContent>
               </Select>
             </div>
+
+            {form.categoryName === 'Combustível' && (
+              <div className="space-y-3 rounded-lg border border-border p-3">
+                <div className="space-y-2">
+                  <Label>Veículo</Label>
+                  <Select value={form.vehicleId} onValueChange={(v) => setForm({ ...form, vehicleId: v })}>
+                    <SelectTrigger className="cursor-pointer">
+                      <SelectValue placeholder={vehicles.length === 0 ? 'Cadastre um veículo em Categorias' : 'Selecione o veículo'} />
+                    </SelectTrigger>
+                    <SelectContent>
+                      {vehicles.map((v) => (
+                        <SelectItem key={v.id} value={String(v.id)} className="cursor-pointer">
+                          {v.name}
+                        </SelectItem>
+                      ))}
+                    </SelectContent>
+                  </Select>
+                </div>
+                <div className="grid grid-cols-2 gap-3">
+                  <div className="space-y-2">
+                    <Label>Litros</Label>
+                    <Input
+                      type="number"
+                      step="0.001"
+                      value={form.liters}
+                      onChange={(e) => setForm({ ...form, liters: e.target.value })}
+                      placeholder="Ex: 32,45"
+                    />
+                  </div>
+                  <div className="space-y-2">
+                    <Label>Preço/L</Label>
+                    <Input
+                      type="number"
+                      step="0.001"
+                      value={form.pricePerLiter}
+                      onChange={(e) => setForm({ ...form, pricePerLiter: e.target.value })}
+                      placeholder="Ex: 5,89"
+                    />
+                  </div>
+                </div>
+                <div className="space-y-2">
+                  <Label>Odômetro (km) — opcional</Label>
+                  <Input
+                    type="number"
+                    step="1"
+                    value={form.odometerKm}
+                    onChange={(e) => setForm({ ...form, odometerKm: e.target.value })}
+                    placeholder="Ex: 45210"
+                  />
+                </div>
+              </div>
+            )}
 
             <div className="space-y-2">
               <Label>Descrição</Label>

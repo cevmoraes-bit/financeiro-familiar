@@ -118,6 +118,39 @@ function parseItemLine(line: string): ParsedItem | null {
   return { name: namePart, quantity, unitPrice, totalPrice };
 }
 
+const LITERS_LABELS = /(?:litros?|qtd\.?\s*litros?|volume)\s*[:\-]?\s*(\d+(?:[.,]\d{1,3})?)/i;
+
+const PRICE_PER_LITER_LABELS =
+  /(?:pre[çc]o\s*(?:por\s*)?\/?\s*(?:litro|l\b)|p\.?\s*unit[aá]rio|valor\s*\/?\s*(?:litro|l\b)|r\$\s*\/\s*l)\s*[:\-]?\s*(?:r\$\s*)?(\d+,\d{2,3})/i;
+
+const FUEL_TYPE_LABELS = /gasolina\s*aditivada|gasolina\s*comum|gasolina|etanol|[aá]lcool|diesel\s*s-?10|diesel/i;
+
+export function extractFuelFields(text: string): Pick<ParsedBill, 'liters' | 'pricePerLiter' | 'fuelType'> {
+  const result: Pick<ParsedBill, 'liters' | 'pricePerLiter' | 'fuelType'> = {};
+
+  const litersMatch = text.match(LITERS_LABELS);
+  if (litersMatch) {
+    const value = parseFloat(litersMatch[1].replace(',', '.'));
+    if (Number.isFinite(value)) result.liters = value;
+  }
+
+  const priceMatch = text.match(PRICE_PER_LITER_LABELS);
+  if (priceMatch) {
+    const value = parseBRCurrency(priceMatch[1]);
+    if (value !== undefined) result.pricePerLiter = value;
+  }
+
+  const fuelTypeMatch = text.match(FUEL_TYPE_LABELS);
+  if (fuelTypeMatch) {
+    result.fuelType = fuelTypeMatch[0]
+      .replace(/\s+/g, ' ')
+      .trim()
+      .replace(/^\w/, (c) => c.toUpperCase());
+  }
+
+  return result;
+}
+
 export function extractItemsFromText(text: string): ParsedItem[] {
   const lines = text.split(/\n+/);
   const items: ParsedItem[] = [];

@@ -24,14 +24,17 @@ import {
   AlertDialogHeader,
   AlertDialogTitle,
 } from '@/components/ui/alert-dialog';
-import { TrendingUp, TrendingDown, Search, Trash2, Filter, Pencil, CheckCircle2, ChevronDown, ChevronUp, ShoppingCart } from 'lucide-react';
+import { TrendingUp, TrendingDown, Search, Trash2, Filter, Pencil, CheckCircle2, ChevronDown, ChevronUp, ShoppingCart, Fuel } from 'lucide-react';
 import { toast } from 'sonner';
 import { supabase } from '@/lib/supabase';
 import { useNavigate } from 'react-router-dom';
 import { Transaction, TransactionItem } from '@/lib/transactions';
+import { useVehicles } from '@/hooks/useVehicles';
 
 const Transactions = () => {
   const { user, loading: authLoading } = useAuth();
+  const { vehicles } = useVehicles();
+  const vehicleName = (id?: number | null) => vehicles.find((v) => v.id === id)?.name;
   const navigate = useNavigate();
   const [transactions, setTransactions] = useState<Transaction[]>([]);
   const [itemsByTransaction, setItemsByTransaction] = useState<Record<number, TransactionItem[]>>({});
@@ -294,7 +297,15 @@ const Transactions = () => {
                         )}
                       </div>
                       <p className="text-xs text-muted-foreground truncate">
-                        {t.beneficiary || t.payer || t.description || formatDate(t.date)}
+                        {t.vehicle_id ? (
+                          <span className="inline-flex items-center gap-1">
+                            <Fuel className="w-3 h-3" />
+                            {vehicleName(t.vehicle_id) || 'Veículo'}
+                            {t.liters ? ` · ${t.liters}L` : ''}
+                          </span>
+                        ) : (
+                          t.beneficiary || t.payer || t.description || formatDate(t.date)
+                        )}
                       </p>
                     </div>
                   </div>

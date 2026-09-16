@@ -2,11 +2,13 @@ import { useState } from 'react';
 import { useNavigate } from 'react-router-dom';
 import { useAuth } from '@/contexts/AuthContext';
 import { useCategories } from '@/hooks/useCategories';
+import { useVehicles } from '@/hooks/useVehicles';
 import AppLayout from '@/components/AppLayout';
 import { Card } from '@/components/ui/card';
 import { Button } from '@/components/ui/button';
 import { Input } from '@/components/ui/input';
 import { Label } from '@/components/ui/label';
+import { Tabs, TabsContent, TabsList, TabsTrigger } from '@/components/ui/tabs';
 import {
   Dialog,
   DialogContent,
@@ -14,13 +16,6 @@ import {
   DialogTitle,
   DialogTrigger,
 } from '@/components/ui/dialog';
-import {
-  Select,
-  SelectContent,
-  SelectItem,
-  SelectTrigger,
-  SelectValue,
-} from '@/components/ui/select';
 import {
   AlertDialog,
   AlertDialogAction,
@@ -31,12 +26,13 @@ import {
   AlertDialogHeader,
   AlertDialogTitle,
 } from '@/components/ui/alert-dialog';
-import { Plus, Pencil, Trash2 } from 'lucide-react';
+import { Plus, Pencil, Trash2, Car } from 'lucide-react';
 import { toast } from 'sonner';
 import { Category } from '@/lib/categories';
+import { Vehicle } from '@/lib/vehicles';
 
-const ICON_OPTIONS = ['🍽️', '🚗', '🏠', '💊', '🎮', '📚', '🛒', '📶', '💳', '📌', '💰', '💻', '📈', '⚡', '🐾', '🎁'];
-const COLOR_OPTIONS = ['#f97316', '#3b82f6', '#8b5cf6', '#10b981', '#ec4899', '#6366f1', '#f59e0b', '#dc2626', '#0ea5e9', '#64748b'];
+const ICON_OPTIONS = ['🍽️', '🚗', '⛽', '🏠', '💊', '🎮', '📚', '🛒', '📶', '💳', '📌', '💰', '💻', '📈', '⚡', '🐾', '🎁'];
+const COLOR_OPTIONS = ['#f97316', '#3b82f6', '#8b5cf6', '#10b981', '#ec4899', '#6366f1', '#f59e0b', '#dc2626', '#0ea5e9', '#eab308', '#64748b'];
 
 interface FormState {
   id: number | null;
@@ -152,36 +148,12 @@ const CategoryForm = ({
   );
 };
 
-const Categories = () => {
-  const { user, loading: authLoading } = useAuth();
-  const navigate = useNavigate();
+const CategoriesTab = () => {
   const { expenseCategories, incomeCategories, loading, createCategory, updateCategory, deleteCategory } =
     useCategories();
   const [dialogOpen, setDialogOpen] = useState(false);
   const [editing, setEditing] = useState<FormState>(emptyForm);
   const [deleteTarget, setDeleteTarget] = useState<Category | null>(null);
-
-  if (authLoading) {
-    return (
-      <div className="min-h-screen bg-background flex items-center justify-center dark">
-        <p className="text-muted-foreground text-sm">Carregando...</p>
-      </div>
-    );
-  }
-
-  if (!user) {
-    return (
-      <div className="min-h-screen bg-background flex flex-col items-center justify-center gap-4 dark p-6">
-        <p className="text-muted-foreground">Faça login para gerenciar categorias</p>
-        <button
-          onClick={() => navigate('/login')}
-          className="px-6 py-2 bg-primary text-primary-foreground rounded-lg font-medium cursor-pointer hover:opacity-90 transition-opacity"
-        >
-          Entrar
-        </button>
-      </div>
-    );
-  }
 
   const openCreate = () => {
     setEditing(emptyForm);
@@ -254,34 +226,31 @@ const Categories = () => {
   );
 
   return (
-    <AppLayout>
-      <div className="space-y-4">
-        <div className="flex items-center justify-between">
-          <h1 className="text-2xl font-bold text-foreground">Categorias</h1>
-          <Dialog open={dialogOpen} onOpenChange={setDialogOpen}>
-            <DialogTrigger asChild>
-              <Button size="sm" className="cursor-pointer" onClick={openCreate}>
-                <Plus className="w-4 h-4 mr-1" /> Nova
-              </Button>
-            </DialogTrigger>
-            <DialogContent className="sm:max-w-md">
-              <DialogHeader>
-                <DialogTitle>{editing.id ? 'Editar categoria' : 'Nova categoria'}</DialogTitle>
-              </DialogHeader>
-              <CategoryForm initial={editing} onSave={handleSave} onClose={() => setDialogOpen(false)} />
-            </DialogContent>
-          </Dialog>
-        </div>
-
-        {loading ? (
-          <p className="text-sm text-muted-foreground">Carregando categorias...</p>
-        ) : (
-          <>
-            {renderList('Despesas', expenseCategories)}
-            {renderList('Receitas', incomeCategories)}
-          </>
-        )}
+    <div className="space-y-4">
+      <div className="flex justify-end">
+        <Dialog open={dialogOpen} onOpenChange={setDialogOpen}>
+          <DialogTrigger asChild>
+            <Button size="sm" className="cursor-pointer" onClick={openCreate}>
+              <Plus className="w-4 h-4 mr-1" /> Nova categoria
+            </Button>
+          </DialogTrigger>
+          <DialogContent className="sm:max-w-md">
+            <DialogHeader>
+              <DialogTitle>{editing.id ? 'Editar categoria' : 'Nova categoria'}</DialogTitle>
+            </DialogHeader>
+            <CategoryForm initial={editing} onSave={handleSave} onClose={() => setDialogOpen(false)} />
+          </DialogContent>
+        </Dialog>
       </div>
+
+      {loading ? (
+        <p className="text-sm text-muted-foreground">Carregando categorias...</p>
+      ) : (
+        <>
+          {renderList('Despesas', expenseCategories)}
+          {renderList('Receitas', incomeCategories)}
+        </>
+      )}
 
       <AlertDialog open={!!deleteTarget} onOpenChange={() => setDeleteTarget(null)}>
         <AlertDialogContent>
@@ -299,6 +268,217 @@ const Categories = () => {
           </AlertDialogFooter>
         </AlertDialogContent>
       </AlertDialog>
+    </div>
+  );
+};
+
+interface VehicleFormState {
+  id: number | null;
+  name: string;
+  plate: string;
+}
+
+const emptyVehicleForm: VehicleFormState = { id: null, name: '', plate: '' };
+
+const VehiclesTab = () => {
+  const { vehicles, loading, createVehicle, updateVehicle, deleteVehicle } = useVehicles();
+  const [dialogOpen, setDialogOpen] = useState(false);
+  const [editing, setEditing] = useState<VehicleFormState>(emptyVehicleForm);
+  const [saving, setSaving] = useState(false);
+  const [deleteTarget, setDeleteTarget] = useState<Vehicle | null>(null);
+
+  const openCreate = () => {
+    setEditing(emptyVehicleForm);
+    setDialogOpen(true);
+  };
+
+  const openEdit = (v: Vehicle) => {
+    setEditing({ id: v.id, name: v.name, plate: v.plate || '' });
+    setDialogOpen(true);
+  };
+
+  const handleSubmit = async (e: React.FormEvent) => {
+    e.preventDefault();
+    if (!editing.name.trim()) {
+      toast.error('Informe o nome/apelido do veículo');
+      return;
+    }
+    setSaving(true);
+    try {
+      if (editing.id) {
+        await updateVehicle(editing.id, { name: editing.name, plate: editing.plate || null });
+        toast.success('Veículo atualizado');
+      } else {
+        await createVehicle({ name: editing.name, plate: editing.plate });
+        toast.success('Veículo cadastrado');
+      }
+      setDialogOpen(false);
+    } catch (err) {
+      const message = err instanceof Error ? err.message : 'Erro ao salvar veículo';
+      toast.error(message);
+    } finally {
+      setSaving(false);
+    }
+  };
+
+  const handleDelete = async () => {
+    if (!deleteTarget) return;
+    try {
+      await deleteVehicle(deleteTarget.id);
+      toast.success('Veículo excluído');
+      setDeleteTarget(null);
+    } catch (err) {
+      const message = err instanceof Error ? err.message : 'Erro ao excluir veículo';
+      toast.error(message);
+    }
+  };
+
+  return (
+    <div className="space-y-4">
+      <div className="flex justify-end">
+        <Dialog open={dialogOpen} onOpenChange={setDialogOpen}>
+          <DialogTrigger asChild>
+            <Button size="sm" className="cursor-pointer" onClick={openCreate}>
+              <Plus className="w-4 h-4 mr-1" /> Novo veículo
+            </Button>
+          </DialogTrigger>
+          <DialogContent className="sm:max-w-md">
+            <DialogHeader>
+              <DialogTitle>{editing.id ? 'Editar veículo' : 'Novo veículo'}</DialogTitle>
+            </DialogHeader>
+            <form onSubmit={handleSubmit} className="space-y-4">
+              <div className="space-y-2">
+                <Label htmlFor="vehicle-name">Nome / apelido</Label>
+                <Input
+                  id="vehicle-name"
+                  placeholder="Ex: Corolla, Moto, Carro da Ana"
+                  value={editing.name}
+                  onChange={(e) => setEditing((f) => ({ ...f, name: e.target.value }))}
+                  autoFocus
+                />
+              </div>
+              <div className="space-y-2">
+                <Label htmlFor="vehicle-plate">Placa (opcional)</Label>
+                <Input
+                  id="vehicle-plate"
+                  placeholder="ABC1D23"
+                  value={editing.plate}
+                  onChange={(e) => setEditing((f) => ({ ...f, plate: e.target.value }))}
+                />
+              </div>
+              <Button type="submit" className="w-full cursor-pointer" disabled={saving}>
+                {saving ? 'Salvando...' : 'Salvar veículo'}
+              </Button>
+            </form>
+          </DialogContent>
+        </Dialog>
+      </div>
+
+      <Card className="p-5">
+        <h2 className="text-sm font-semibold text-foreground mb-4">Seus veículos</h2>
+        {loading ? (
+          <p className="text-sm text-muted-foreground">Carregando...</p>
+        ) : vehicles.length === 0 ? (
+          <p className="text-sm text-muted-foreground">
+            Nenhum veículo cadastrado ainda. Cadastre para vincular cada abastecimento a um carro/moto.
+          </p>
+        ) : (
+          <div className="space-y-2">
+            {vehicles.map((v) => (
+              <div key={v.id} className="flex items-center justify-between rounded-lg border border-border px-3 py-2.5">
+                <div className="flex items-center gap-3 min-w-0">
+                  <div className="w-8 h-8 rounded-full bg-primary/10 flex items-center justify-center flex-shrink-0">
+                    <Car className="w-4 h-4 text-primary" />
+                  </div>
+                  <div className="min-w-0">
+                    <p className="text-sm font-medium text-foreground truncate">{v.name}</p>
+                    {v.plate && <p className="text-xs text-muted-foreground truncate">{v.plate}</p>}
+                  </div>
+                </div>
+                <div className="flex items-center gap-1 flex-shrink-0">
+                  <Button variant="ghost" size="icon" className="h-8 w-8 cursor-pointer" onClick={() => openEdit(v)}>
+                    <Pencil className="w-3.5 h-3.5" />
+                  </Button>
+                  <Button
+                    variant="ghost"
+                    size="icon"
+                    className="h-8 w-8 cursor-pointer text-muted-foreground hover:text-destructive"
+                    onClick={() => setDeleteTarget(v)}
+                  >
+                    <Trash2 className="w-3.5 h-3.5" />
+                  </Button>
+                </div>
+              </div>
+            ))}
+          </div>
+        )}
+      </Card>
+
+      <AlertDialog open={!!deleteTarget} onOpenChange={() => setDeleteTarget(null)}>
+        <AlertDialogContent>
+          <AlertDialogHeader>
+            <AlertDialogTitle>Excluir veículo</AlertDialogTitle>
+            <AlertDialogDescription>
+              Os abastecimentos já registrados para "{deleteTarget?.name}" não serão excluídos, mas ficarão sem
+              veículo vinculado.
+            </AlertDialogDescription>
+          </AlertDialogHeader>
+          <AlertDialogFooter>
+            <AlertDialogCancel className="cursor-pointer">Cancelar</AlertDialogCancel>
+            <AlertDialogAction onClick={handleDelete} className="cursor-pointer bg-destructive text-destructive-foreground hover:bg-destructive/90">
+              Excluir
+            </AlertDialogAction>
+          </AlertDialogFooter>
+        </AlertDialogContent>
+      </AlertDialog>
+    </div>
+  );
+};
+
+const Categories = () => {
+  const { user, loading: authLoading } = useAuth();
+  const navigate = useNavigate();
+
+  if (authLoading) {
+    return (
+      <div className="min-h-screen bg-background flex items-center justify-center dark">
+        <p className="text-muted-foreground text-sm">Carregando...</p>
+      </div>
+    );
+  }
+
+  if (!user) {
+    return (
+      <div className="min-h-screen bg-background flex flex-col items-center justify-center gap-4 dark p-6">
+        <p className="text-muted-foreground">Faça login para gerenciar categorias e veículos</p>
+        <button
+          onClick={() => navigate('/login')}
+          className="px-6 py-2 bg-primary text-primary-foreground rounded-lg font-medium cursor-pointer hover:opacity-90 transition-opacity"
+        >
+          Entrar
+        </button>
+      </div>
+    );
+  }
+
+  return (
+    <AppLayout>
+      <div className="space-y-4">
+        <h1 className="text-2xl font-bold text-foreground">Categorias e veículos</h1>
+
+        <Tabs defaultValue="categories">
+          <TabsList className="grid w-full grid-cols-2">
+            <TabsTrigger value="categories" className="cursor-pointer">Categorias</TabsTrigger>
+            <TabsTrigger value="vehicles" className="cursor-pointer">Veículos</TabsTrigger>
+          </TabsList>
+          <TabsContent value="categories">
+            <CategoriesTab />
+          </TabsContent>
+          <TabsContent value="vehicles">
+            <VehiclesTab />
+          </TabsContent>
+        </Tabs>
+      </div>
     </AppLayout>
   );
 };
