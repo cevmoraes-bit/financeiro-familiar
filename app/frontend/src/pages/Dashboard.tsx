@@ -4,25 +4,20 @@ import { useAuth } from '@/contexts/AuthContext';
 import AppLayout from '@/components/AppLayout';
 import AddTransactionDialog from '@/components/AddTransactionDialog';
 import { Card } from '@/components/ui/card';
+import { Button } from '@/components/ui/button';
 import { Skeleton } from '@/components/ui/skeleton';
-import { 
-  TrendingUp, 
-  TrendingDown, 
+import {
+  TrendingUp,
+  TrendingDown,
   Wallet,
   ArrowUpRight,
-  ArrowDownRight 
+  ArrowDownRight,
+  CalendarClock,
+  CheckCircle2,
 } from 'lucide-react';
 import { supabase } from '@/lib/supabase';
-
-interface Transaction {
-  id: number;
-  type: string;
-  amount: number;
-  category: string;
-  description?: string;
-  date: string;
-  created_at: string;
-}
+import { toast } from 'sonner';
+import { Transaction } from '@/lib/transactions';
 
 interface CategorySummary {
   name: string;
@@ -31,27 +26,14 @@ interface CategorySummary {
   color: string;
 }
 
-const CATEGORY_COLORS: Record<string, string> = {
-  'Alimentação': '#f97316',
-  'Transporte': '#3b82f6',
-  'Moradia': '#8b5cf6',
-  'Saúde': '#10b981',
-  'Lazer': '#ec4899',
-  'Educação': '#6366f1',
-  'Compras': '#f59e0b',
-  'Salário': '#10b981',
-  'Freelance': '#3b82f6',
-  'Investimentos': '#8b5cf6',
-  'Outros': '#64748b',
-};
-
 const Dashboard = () => {
   const { user, loading: authLoading } = useAuth();
   const navigate = useNavigate();
   const [transactions, setTransactions] = useState<Transaction[]>([]);
+  const [pendingBills, setPendingBills] = useState<Transaction[]>([]);
   const [loadingData, setLoadingData] = useState(true);
 
-  const fetchTransactions = useCallback(async () => {
+  const fetchData = useCallback(async () => {
     try {
       setLoadingData(true);
       const now = new Date();
@@ -59,17 +41,29 @@ const Dashboard = () => {
         .toISOString()
         .split('T')[0];
 
-      const { data, error } = await supabase
-        .from('transactions')
-        .select('*')
-        .gte('date', startOfMonth)
-        .order('date', { ascending: false })
-        .limit(500);
+      const [paidRes, pendingRes] = await Promise.all([
+        supabase
+          .from('transactions')
+          .select('*')
+          .eq('status', 'paid')
+          .gte('date', startOfMonth)
+          .order('date', { ascending: false })
+          .limit(500),
+        supabase
+          .from('transactions')
+          .select('*')
+          .eq('status', 'pending')
+          .order('due_date', { ascending: true })
+          .limit(20),
+      ]);
 
-      if (error) throw error;
-      setTransactions((data as Transaction[]) || []);
+      if (paidRes.error) throw paidRes.error;
+      if (pendingRes.error) throw pendingRes.error;
+
+      setTransactions((paidRes.data as Transaction[]) || []);
+      setPendingBills((pendingRes.data as Transaction[]) || []);
     } catch (err) {
-      console.error('Error fetching transactions:', err);
+      console.error('Error fetching dashboard data:', err);
     } finally {
       setLoadingData(false);
     }
@@ -80,9 +74,24 @@ const Dashboard = () => {
       return;
     }
     if (user) {
-      fetchTransactions();
+      fetchData();
     }
-  }, [user, authLoading, fetchTransactions]);
+  }, [user, authLoading, fetchData]);
+
+  const handleMarkPaid = async (t: Transaction) => {
+    try {
+      const { error } = await supabase
+        .from('transactions')
+        .update({ status: 'paid', date: new Date().toISOString().split('T')[0] })
+        .eq('id', t.id);
+      if (error) throw error;
+      toast.success(t.type === 'expense' ? 'Marcada como paga' : 'Marcada como recebida');
+      fetchData();
+    } catch (err) {
+      const message = err instanceof Error ? err.message : 'Erro ao atualizar';
+      toast.error(message);
+    }
+  };
 
   if (authLoading) {
     return (
@@ -99,7 +108,7 @@ const Dashboard = () => {
     return (
       <div className="min-h-screen bg-background flex flex-col items-center justify-center gap-4 dark p-6">
         <p className="text-muted-foreground">Faça login para acessar o dashboard</p>
-        <button 
+        <button
           onClick={() => navigate('/login')}
           className="px-6 py-2 bg-primary text-primary-foreground rounded-lg font-medium cursor-pointer hover:opacity-90 transition-opacity"
         >
@@ -127,12 +136,13 @@ const Dashboard = () => {
       grouped[t.category] = (grouped[t.category] || 0) + t.amount;
     });
     const total = totalExpense || 1;
+    const palette = ['#f97316', '#3b82f6', '#8b5cf6', '#10b981', '#ec4899', '#6366f1', '#f59e0b', '#dc2626', '#0ea5e9', '#64748b'];
     return Object.entries(grouped)
-      .map(([name, amount]) => ({
+      .map(([name, amount], i) => ({
         name,
         total: amount,
         percentage: (amount / total) * 100,
-        color: CATEGORY_COLORS[name] || '#64748b',
+        color: palette[i % palette.length],
       }))
       .sort((a, b) => b.total - a.total);
   })();
@@ -148,6 +158,12 @@ const Dashboard = () => {
       currency: 'BRL',
     }).format(value);
   };
+
+  const formatDate = (dateStr: string) =>
+    new Date(dateStr + 'T00:00:00').toLocaleDateString('pt-BR', { day: '2-digit', month: 'short' });
+
+  const todayIso = new Date().toISOString().split('T')[0];
+  const isOverdue = (t: Transaction) => !!t.due_date && t.due_date < todayIso;
 
   const currentMonth = new Date().toLocaleDateString('pt-BR', { month: 'long', year: 'numeric' });
 
@@ -202,6 +218,61 @@ const Dashboard = () => {
                 <p className="text-lg font-bold text-red-500">{formatCurrency(totalExpense)}</p>
               </Card>
             </div>
+
+            {/* Pending bills (contas a pagar/receber) */}
+            {pendingBills.length > 0 && (
+              <Card className="p-5">
+                <div className="flex items-center gap-2 mb-4">
+                  <CalendarClock className="w-4 h-4 text-amber-500" />
+                  <h2 className="text-sm font-semibold text-foreground">Contas a pagar e a receber</h2>
+                </div>
+                <div className="space-y-3">
+                  {pendingBills.map((t) => (
+                    <div key={t.id} className="flex items-center justify-between gap-2">
+                      <div className="flex items-center gap-3 min-w-0">
+                        <div className={`w-8 h-8 rounded-full flex-shrink-0 flex items-center justify-center ${
+                          t.type === 'income' ? 'bg-emerald-500/10' : 'bg-red-500/10'
+                        }`}>
+                          {t.type === 'income' ? (
+                            <TrendingUp className="w-4 h-4 text-emerald-500" />
+                          ) : (
+                            <TrendingDown className="w-4 h-4 text-red-500" />
+                          )}
+                        </div>
+                        <div className="min-w-0">
+                          <p className="text-sm font-medium text-foreground truncate">
+                            {t.beneficiary || t.payer || t.category}
+                          </p>
+                          <p className={`text-xs ${isOverdue(t) ? 'text-destructive' : 'text-muted-foreground'}`}>
+                            {t.due_date ? `Vence ${formatDate(t.due_date)}` : 'Sem data'}
+                          </p>
+                        </div>
+                      </div>
+                      <div className="flex items-center gap-2 flex-shrink-0">
+                        <span className={`text-sm font-semibold ${t.type === 'income' ? 'text-emerald-500' : 'text-red-500'}`}>
+                          {formatCurrency(t.amount)}
+                        </span>
+                        <Button
+                          variant="ghost"
+                          size="icon"
+                          className="h-7 w-7 cursor-pointer text-muted-foreground hover:text-emerald-500"
+                          title="Marcar como paga/recebida"
+                          onClick={() => handleMarkPaid(t)}
+                        >
+                          <CheckCircle2 className="w-4 h-4" />
+                        </Button>
+                      </div>
+                    </div>
+                  ))}
+                </div>
+                <button
+                  onClick={() => navigate('/transactions')}
+                  className="text-xs text-primary font-medium cursor-pointer hover:underline mt-4"
+                >
+                  Ver todas
+                </button>
+              </Card>
+            )}
 
             {/* Category Breakdown */}
             {expensesByCategory.length > 0 && (
@@ -275,7 +346,7 @@ const Dashboard = () => {
             )}
 
             {/* Empty state */}
-            {transactions.length === 0 && (
+            {transactions.length === 0 && pendingBills.length === 0 && (
               <Card className="p-8 text-center">
                 <div className="flex flex-col items-center gap-3">
                   <div className="w-12 h-12 rounded-full bg-muted flex items-center justify-center">
@@ -294,7 +365,7 @@ const Dashboard = () => {
         )}
       </div>
 
-      <AddTransactionDialog onSuccess={fetchTransactions} />
+      <AddTransactionDialog onSuccess={fetchData} />
     </AppLayout>
   );
 };

@@ -5,6 +5,7 @@ import AddTransactionDialog from '@/components/AddTransactionDialog';
 import { Card } from '@/components/ui/card';
 import { Button } from '@/components/ui/button';
 import { Input } from '@/components/ui/input';
+import { Badge } from '@/components/ui/badge';
 import { Skeleton } from '@/components/ui/skeleton';
 import {
   Select,
@@ -23,20 +24,11 @@ import {
   AlertDialogHeader,
   AlertDialogTitle,
 } from '@/components/ui/alert-dialog';
-import { TrendingUp, TrendingDown, Search, Trash2, Filter } from 'lucide-react';
+import { TrendingUp, TrendingDown, Search, Trash2, Filter, Pencil, CheckCircle2 } from 'lucide-react';
 import { toast } from 'sonner';
 import { supabase } from '@/lib/supabase';
 import { useNavigate } from 'react-router-dom';
-
-interface Transaction {
-  id: number;
-  type: string;
-  amount: number;
-  category: string;
-  description?: string;
-  date: string;
-  created_at: string;
-}
+import { Transaction } from '@/lib/transactions';
 
 const Transactions = () => {
   const { user, loading: authLoading } = useAuth();
@@ -45,6 +37,7 @@ const Transactions = () => {
   const [loadingData, setLoadingData] = useState(true);
   const [searchTerm, setSearchTerm] = useState('');
   const [filterType, setFilterType] = useState<string>('all');
+  const [filterStatus, setFilterStatus] = useState<string>('all');
   const [filterMonth, setFilterMonth] = useState<string>('all');
   const [deleteId, setDeleteId] = useState<number | null>(null);
 
@@ -89,6 +82,21 @@ const Transactions = () => {
     }
   };
 
+  const handleMarkPaid = async (t: Transaction) => {
+    try {
+      const { error } = await supabase
+        .from('transactions')
+        .update({ status: 'paid', date: new Date().toISOString().split('T')[0] })
+        .eq('id', t.id);
+      if (error) throw error;
+      toast.success(t.type === 'expense' ? 'Marcada como paga' : 'Marcada como recebida');
+      fetchTransactions();
+    } catch (err) {
+      const message = err instanceof Error ? err.message : 'Erro ao atualizar';
+      toast.error(message);
+    }
+  };
+
   if (authLoading) {
     return (
       <div className="min-h-screen bg-background flex items-center justify-center dark">
@@ -104,7 +112,7 @@ const Transactions = () => {
     return (
       <div className="min-h-screen bg-background flex flex-col items-center justify-center gap-4 dark p-6">
         <p className="text-muted-foreground">Faça login para ver suas transações</p>
-        <button 
+        <button
           onClick={() => navigate('/login')}
           className="px-6 py-2 bg-primary text-primary-foreground rounded-lg font-medium cursor-pointer hover:opacity-90 transition-opacity"
         >
@@ -119,12 +127,15 @@ const Transactions = () => {
 
   // Filter transactions
   const filteredTransactions = transactions.filter((t) => {
-    const matchesSearch = searchTerm === '' || 
+    const matchesSearch = searchTerm === '' ||
       t.category.toLowerCase().includes(searchTerm.toLowerCase()) ||
-      (t.description || '').toLowerCase().includes(searchTerm.toLowerCase());
+      (t.description || '').toLowerCase().includes(searchTerm.toLowerCase()) ||
+      (t.beneficiary || '').toLowerCase().includes(searchTerm.toLowerCase()) ||
+      (t.payer || '').toLowerCase().includes(searchTerm.toLowerCase());
     const matchesType = filterType === 'all' || t.type === filterType;
+    const matchesStatus = filterStatus === 'all' || t.status === filterStatus;
     const matchesMonth = filterMonth === 'all' || t.date.startsWith(filterMonth);
-    return matchesSearch && matchesType && matchesMonth;
+    return matchesSearch && matchesType && matchesStatus && matchesMonth;
   });
 
   const formatCurrency = (value: number) => {
@@ -147,6 +158,9 @@ const Transactions = () => {
     return date.toLocaleDateString('pt-BR', { month: 'long', year: 'numeric' });
   };
 
+  const isOverdue = (t: Transaction) =>
+    t.status === 'pending' && !!t.due_date && t.due_date < new Date().toISOString().split('T')[0];
+
   return (
     <AppLayout>
       <div className="space-y-4">
@@ -157,7 +171,7 @@ const Transactions = () => {
           <div className="relative">
             <Search className="absolute left-3 top-1/2 -translate-y-1/2 w-4 h-4 text-muted-foreground" />
             <Input
-              placeholder="Buscar por categoria ou descrição..."
+              placeholder="Buscar por categoria, beneficiário, pagador..."
               value={searchTerm}
               onChange={(e) => setSearchTerm(e.target.value)}
               className="pl-9"
@@ -177,20 +191,30 @@ const Transactions = () => {
                 <SelectItem value="income" className="cursor-pointer">Receitas</SelectItem>
               </SelectContent>
             </Select>
-            <Select value={filterMonth} onValueChange={setFilterMonth}>
+            <Select value={filterStatus} onValueChange={setFilterStatus}>
               <SelectTrigger className="flex-1 cursor-pointer">
-                <SelectValue placeholder="Mês" />
+                <SelectValue />
               </SelectTrigger>
               <SelectContent>
-                <SelectItem value="all" className="cursor-pointer">Todos os meses</SelectItem>
-                {months.map((m) => (
-                  <SelectItem key={m} value={m} className="cursor-pointer capitalize">
-                    {getMonthLabel(m)}
-                  </SelectItem>
-                ))}
+                <SelectItem value="all" className="cursor-pointer">Todas situações</SelectItem>
+                <SelectItem value="paid" className="cursor-pointer">Pagas/recebidas</SelectItem>
+                <SelectItem value="pending" className="cursor-pointer">Pendentes</SelectItem>
               </SelectContent>
             </Select>
           </div>
+          <Select value={filterMonth} onValueChange={setFilterMonth}>
+            <SelectTrigger className="cursor-pointer">
+              <SelectValue placeholder="Mês" />
+            </SelectTrigger>
+            <SelectContent>
+              <SelectItem value="all" className="cursor-pointer">Todos os meses</SelectItem>
+              {months.map((m) => (
+                <SelectItem key={m} value={m} className="cursor-pointer capitalize">
+                  {getMonthLabel(m)}
+                </SelectItem>
+              ))}
+            </SelectContent>
+          </Select>
         </div>
 
         {/* Transaction List */}
@@ -212,7 +236,7 @@ const Transactions = () => {
           <div className="space-y-2">
             {filteredTransactions.map((t) => (
               <Card key={t.id} className="p-4">
-                <div className="flex items-center justify-between">
+                <div className="flex items-center justify-between gap-2">
                   <div className="flex items-center gap-3 flex-1 min-w-0">
                     <div className={`w-9 h-9 rounded-full flex-shrink-0 flex items-center justify-center ${
                       t.type === 'income' ? 'bg-emerald-500/10' : 'bg-red-500/10'
@@ -224,21 +248,50 @@ const Transactions = () => {
                       )}
                     </div>
                     <div className="min-w-0 flex-1">
-                      <p className="text-sm font-medium text-foreground truncate">{t.category}</p>
+                      <div className="flex items-center gap-1.5 flex-wrap">
+                        <p className="text-sm font-medium text-foreground truncate">{t.category}</p>
+                        {t.status === 'pending' && (
+                          <Badge variant={isOverdue(t) ? 'destructive' : 'outline'} className="text-[10px] px-1.5 py-0">
+                            {isOverdue(t) ? 'Vencida' : 'Pendente'}
+                          </Badge>
+                        )}
+                      </div>
                       <p className="text-xs text-muted-foreground truncate">
-                        {t.description || formatDate(t.date)}
+                        {t.beneficiary || t.payer || t.description || formatDate(t.date)}
                       </p>
                     </div>
                   </div>
-                  <div className="flex items-center gap-3 flex-shrink-0">
-                    <div className="text-right">
+                  <div className="flex items-center gap-1 flex-shrink-0">
+                    <div className="text-right mr-1">
                       <p className={`text-sm font-semibold ${
                         t.type === 'income' ? 'text-emerald-500' : 'text-red-500'
                       }`}>
                         {t.type === 'income' ? '+' : '-'}{formatCurrency(t.amount)}
                       </p>
-                      <p className="text-xs text-muted-foreground">{formatDate(t.date)}</p>
+                      <p className="text-xs text-muted-foreground">
+                        {t.status === 'pending' && t.due_date ? `vence ${formatDate(t.due_date)}` : formatDate(t.date)}
+                      </p>
                     </div>
+                    {t.status === 'pending' && (
+                      <Button
+                        variant="ghost"
+                        size="icon"
+                        className="h-8 w-8 cursor-pointer text-muted-foreground hover:text-emerald-500"
+                        title="Marcar como paga/recebida"
+                        onClick={() => handleMarkPaid(t)}
+                      >
+                        <CheckCircle2 className="w-4 h-4" />
+                      </Button>
+                    )}
+                    <AddTransactionDialog
+                      transaction={t}
+                      onSuccess={fetchTransactions}
+                      trigger={
+                        <Button variant="ghost" size="icon" className="h-8 w-8 cursor-pointer text-muted-foreground hover:text-foreground">
+                          <Pencil className="w-3.5 h-3.5" />
+                        </Button>
+                      }
+                    />
                     <Button
                       variant="ghost"
                       size="icon"

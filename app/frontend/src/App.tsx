@@ -7,6 +7,8 @@ import Index from './pages/Index';
 import Login from './pages/Login';
 import Dashboard from './pages/Dashboard';
 import Transactions from './pages/Transactions';
+import Categories from './pages/Categories';
+import Import from './pages/Import';
 
 const queryClient = new QueryClient();
 
@@ -16,6 +18,8 @@ const AppRoutes = () => (
     <Route path="/login" element={<Login />} />
     <Route path="/dashboard" element={<Dashboard />} />
     <Route path="/transactions" element={<Transactions />} />
+    <Route path="/categories" element={<Categories />} />
+    <Route path="/import" element={<Import />} />
   </Routes>
 );
 

@@ -1,4 +1,4 @@
-import { useState } from 'react';
+import { ReactNode, useState } from 'react';
 import { Button } from '@/components/ui/button';
 import { Input } from '@/components/ui/input';
 import { Label } from '@/components/ui/label';
@@ -20,46 +20,52 @@ import { Plus } from 'lucide-react';
 import { toast } from 'sonner';
 import { supabase } from '@/lib/supabase';
 import { useAuth } from '@/contexts/AuthContext';
-
-const DEFAULT_CATEGORIES = {
-  expense: [
-    { name: 'Alimentação', icon: '🍽️', color: '#f97316' },
-    { name: 'Transporte', icon: '🚗', color: '#3b82f6' },
-    { name: 'Moradia', icon: '🏠', color: '#8b5cf6' },
-    { name: 'Saúde', icon: '💊', color: '#10b981' },
-    { name: 'Lazer', icon: '🎮', color: '#ec4899' },
-    { name: 'Educação', icon: '📚', color: '#6366f1' },
-    { name: 'Compras', icon: '🛒', color: '#f59e0b' },
-    { name: 'Outros', icon: '📌', color: '#64748b' },
-  ],
-  income: [
-    { name: 'Salário', icon: '💰', color: '#10b981' },
-    { name: 'Freelance', icon: '💻', color: '#3b82f6' },
-    { name: 'Investimentos', icon: '📈', color: '#8b5cf6' },
-    { name: 'Outros', icon: '📌', color: '#64748b' },
-  ],
-};
+import { useCategories } from '@/hooks/useCategories';
+import { Transaction } from '@/lib/transactions';
 
 interface AddTransactionDialogProps {
   onSuccess: () => void;
+  transaction?: Transaction;
+  trigger?: ReactNode;
 }
 
-const AddTransactionDialog = ({ onSuccess }: AddTransactionDialogProps) => {
+const todayStr = () => new Date().toISOString().split('T')[0];
+
+const AddTransactionDialog = ({ onSuccess, transaction, trigger }: AddTransactionDialogProps) => {
   const { user } = useAuth();
+  const { expenseCategories, incomeCategories } = useCategories();
+  const isEdit = !!transaction;
   const [open, setOpen] = useState(false);
-  const [type, setType] = useState<'expense' | 'income'>('expense');
-  const [amount, setAmount] = useState('');
-  const [category, setCategory] = useState('');
-  const [description, setDescription] = useState('');
-  const [date, setDate] = useState(new Date().toISOString().split('T')[0]);
+  const [type, setType] = useState<'expense' | 'income'>(transaction?.type || 'expense');
+  const [amount, setAmount] = useState(transaction ? String(transaction.amount) : '');
+  const [category, setCategory] = useState(transaction?.category || '');
+  const [description, setDescription] = useState(transaction?.description || '');
+  const [date, setDate] = useState(transaction?.date || todayStr());
+  const [status, setStatus] = useState<'paid' | 'pending'>(transaction?.status || 'paid');
+  const [dueDate, setDueDate] = useState(transaction?.due_date || transaction?.date || todayStr());
+  const [beneficiary, setBeneficiary] = useState(transaction?.beneficiary || '');
+  const [payer, setPayer] = useState(transaction?.payer || '');
   const [loading, setLoading] = useState(false);
 
-  const categories = DEFAULT_CATEGORIES[type];
+  const categories = type === 'expense' ? expenseCategories : incomeCategories;
+
+  const resetForm = () => {
+    if (isEdit) return;
+    setAmount('');
+    setCategory('');
+    setDescription('');
+    setDate(todayStr());
+    setDueDate(todayStr());
+    setStatus('paid');
+    setBeneficiary('');
+    setPayer('');
+    setType('expense');
+  };
 
   const handleSubmit = async (e: React.FormEvent) => {
     e.preventDefault();
-    
-    if (!amount || !category || !date) {
+
+    if (!amount || !category) {
       toast.error('Preencha todos os campos obrigatórios');
       return;
     }
@@ -70,25 +76,48 @@ const AddTransactionDialog = ({ onSuccess }: AddTransactionDialogProps) => {
       return;
     }
 
+    const effectiveDate = status === 'pending' ? dueDate : date;
+    if (!effectiveDate) {
+      toast.error('Informe a data');
+      return;
+    }
+
     if (!user) {
       toast.error('Você precisa estar logado');
       return;
     }
 
+    const match = categories.find((c) => c.name === category);
+
     setLoading(true);
     try {
-      const { error } = await supabase.from('transactions').insert({
-        user_id: user.id,
+      const payload = {
         type,
         amount: numAmount,
         category,
+        category_id: match?.id ?? null,
         description: description || null,
-        date,
-      });
+        date: effectiveDate,
+        due_date: dueDate || effectiveDate,
+        status,
+        beneficiary: beneficiary || null,
+        payer: payer || null,
+      };
 
-      if (error) throw error;
+      if (isEdit && transaction) {
+        const { error } = await supabase.from('transactions').update(payload).eq('id', transaction.id);
+        if (error) throw error;
+        toast.success('Transação atualizada!');
+      } else {
+        const { error } = await supabase.from('transactions').insert({
+          ...payload,
+          user_id: user.id,
+          source: 'manual',
+        });
+        if (error) throw error;
+        toast.success(type === 'expense' ? 'Despesa registrada!' : 'Receita registrada!');
+      }
 
-      toast.success(type === 'expense' ? 'Despesa registrada!' : 'Receita registrada!');
       setOpen(false);
       resetForm();
       onSuccess();
@@ -100,27 +129,21 @@ const AddTransactionDialog = ({ onSuccess }: AddTransactionDialogProps) => {
     }
   };
 
-  const resetForm = () => {
-    setAmount('');
-    setCategory('');
-    setDescription('');
-    setDate(new Date().toISOString().split('T')[0]);
-    setType('expense');
-  };
-
   return (
     <Dialog open={open} onOpenChange={setOpen}>
       <DialogTrigger asChild>
-        <Button 
-          size="lg" 
-          className="fixed bottom-20 right-4 sm:right-8 z-50 rounded-full w-14 h-14 shadow-lg cursor-pointer"
-        >
-          <Plus className="w-6 h-6" />
-        </Button>
+        {trigger || (
+          <Button
+            size="lg"
+            className="fixed bottom-20 right-4 sm:right-8 z-50 rounded-full w-14 h-14 shadow-lg cursor-pointer"
+          >
+            <Plus className="w-6 h-6" />
+          </Button>
+        )}
       </DialogTrigger>
-      <DialogContent className="sm:max-w-md">
+      <DialogContent className="sm:max-w-md max-h-[85vh] overflow-y-auto">
         <DialogHeader>
-          <DialogTitle>Nova transação</DialogTitle>
+          <DialogTitle>{isEdit ? 'Editar transação' : 'Nova transação'}</DialogTitle>
         </DialogHeader>
         <form onSubmit={handleSubmit} className="space-y-4">
           {/* Type toggle */}
@@ -168,7 +191,7 @@ const AddTransactionDialog = ({ onSuccess }: AddTransactionDialogProps) => {
               </SelectTrigger>
               <SelectContent>
                 {categories.map((cat) => (
-                  <SelectItem key={cat.name} value={cat.name} className="cursor-pointer">
+                  <SelectItem key={cat.id} value={cat.name} className="cursor-pointer">
                     <span className="flex items-center gap-2">
                       <span>{cat.icon}</span>
                       <span>{cat.name}</span>
@@ -177,6 +200,49 @@ const AddTransactionDialog = ({ onSuccess }: AddTransactionDialogProps) => {
                 ))}
               </SelectContent>
             </Select>
+          </div>
+
+          {/* Status */}
+          <div className="space-y-2">
+            <Label htmlFor="status">Situação</Label>
+            <Select value={status} onValueChange={(v: 'paid' | 'pending') => setStatus(v)}>
+              <SelectTrigger id="status" className="cursor-pointer">
+                <SelectValue />
+              </SelectTrigger>
+              <SelectContent>
+                <SelectItem value="paid" className="cursor-pointer">
+                  {type === 'expense' ? 'Já paga' : 'Já recebida'}
+                </SelectItem>
+                <SelectItem value="pending" className="cursor-pointer">
+                  {type === 'expense' ? 'A pagar (pendente)' : 'A receber (pendente)'}
+                </SelectItem>
+              </SelectContent>
+            </Select>
+          </div>
+
+          {/* Date / Due date */}
+          {status === 'paid' ? (
+            <div className="space-y-2">
+              <Label htmlFor="date">Data</Label>
+              <Input id="date" type="date" value={date} onChange={(e) => setDate(e.target.value)} className="cursor-pointer" />
+            </div>
+          ) : (
+            <div className="space-y-2">
+              <Label htmlFor="dueDate">Vencimento</Label>
+              <Input id="dueDate" type="date" value={dueDate} onChange={(e) => setDueDate(e.target.value)} className="cursor-pointer" />
+            </div>
+          )}
+
+          {/* Beneficiary / Payer */}
+          <div className="grid grid-cols-2 gap-3">
+            <div className="space-y-2">
+              <Label htmlFor="beneficiary">Beneficiário</Label>
+              <Input id="beneficiary" placeholder="Opcional" value={beneficiary} onChange={(e) => setBeneficiary(e.target.value)} />
+            </div>
+            <div className="space-y-2">
+              <Label htmlFor="payer">Pagador</Label>
+              <Input id="payer" placeholder="Opcional" value={payer} onChange={(e) => setPayer(e.target.value)} />
+            </div>
           </div>
 
           {/* Description */}
@@ -190,25 +256,13 @@ const AddTransactionDialog = ({ onSuccess }: AddTransactionDialogProps) => {
             />
           </div>
 
-          {/* Date */}
-          <div className="space-y-2">
-            <Label htmlFor="date">Data</Label>
-            <Input
-              id="date"
-              type="date"
-              value={date}
-              onChange={(e) => setDate(e.target.value)}
-              className="cursor-pointer"
-            />
-          </div>
-
           {/* Submit */}
-          <Button 
-            type="submit" 
-            className="w-full cursor-pointer" 
+          <Button
+            type="submit"
+            className="w-full cursor-pointer"
             disabled={loading}
           >
-            {loading ? 'Salvando...' : 'Salvar transação'}
+            {loading ? 'Salvando...' : isEdit ? 'Salvar alterações' : 'Salvar transação'}
           </Button>
         </form>
       </DialogContent>

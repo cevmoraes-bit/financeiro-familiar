@@ -2,11 +2,13 @@ import { ReactNode } from 'react';
 import { useNavigate, useLocation } from 'react-router-dom';
 import { useAuth } from '@/contexts/AuthContext';
 import { Button } from '@/components/ui/button';
-import { 
-  LayoutDashboard, 
-  List, 
-  LogOut, 
+import {
+  LayoutDashboard,
+  List,
+  LogOut,
   TrendingUp,
+  Upload,
+  Tag,
   User
 } from 'lucide-react';
 
@@ -27,6 +29,8 @@ const AppLayout = ({ children }: AppLayoutProps) => {
   const navItems = [
     { path: '/dashboard', label: 'Dashboard', icon: LayoutDashboard },
     { path: '/transactions', label: 'Transações', icon: List },
+    { path: '/import', label: 'Importar', icon: Upload },
+    { path: '/categories', label: 'Categorias', icon: Tag },
   ];
 
   return (
