@@ -14,6 +14,7 @@ import {
   ArrowDownRight,
   CalendarClock,
   CheckCircle2,
+  ShoppingCart,
 } from 'lucide-react';
 import { supabase } from '@/lib/supabase';
 import { toast } from 'sonner';
@@ -26,11 +27,17 @@ interface CategorySummary {
   color: string;
 }
 
+interface ProductSummary {
+  name: string;
+  total: number;
+}
+
 const Dashboard = () => {
   const { user, loading: authLoading } = useAuth();
   const navigate = useNavigate();
   const [transactions, setTransactions] = useState<Transaction[]>([]);
   const [pendingBills, setPendingBills] = useState<Transaction[]>([]);
+  const [topProducts, setTopProducts] = useState<ProductSummary[]>([]);
   const [loadingData, setLoadingData] = useState(true);
 
   const fetchData = useCallback(async () => {
@@ -60,8 +67,31 @@ const Dashboard = () => {
       if (paidRes.error) throw paidRes.error;
       if (pendingRes.error) throw pendingRes.error;
 
-      setTransactions((paidRes.data as Transaction[]) || []);
+      const paidTransactions = (paidRes.data as Transaction[]) || [];
+      setTransactions(paidTransactions);
       setPendingBills((pendingRes.data as Transaction[]) || []);
+
+      if (paidTransactions.length > 0) {
+        const { data: items, error: itemsError } = await supabase
+          .from('transaction_items')
+          .select('name, total_price')
+          .in(
+            'transaction_id',
+            paidTransactions.map((t) => t.id)
+          );
+        if (itemsError) throw itemsError;
+        const grouped: Record<string, number> = {};
+        (items || []).forEach((it) => {
+          grouped[it.name] = (grouped[it.name] || 0) + it.total_price;
+        });
+        const products = Object.entries(grouped)
+          .map(([name, total]) => ({ name, total }))
+          .sort((a, b) => b.total - a.total)
+          .slice(0, 6);
+        setTopProducts(products);
+      } else {
+        setTopProducts([]);
+      }
     } catch (err) {
       console.error('Error fetching dashboard data:', err);
     } finally {
@@ -299,6 +329,29 @@ const Dashboard = () => {
                     </div>
                   ))}
                 </div>
+              </Card>
+            )}
+
+            {/* Top products (market receipts imported by photo) */}
+            {topProducts.length > 0 && (
+              <Card className="p-5">
+                <div className="flex items-center gap-2 mb-4">
+                  <ShoppingCart className="w-4 h-4 text-primary" />
+                  <h2 className="text-sm font-semibold text-foreground">Produtos do mês</h2>
+                </div>
+                <div className="space-y-2.5">
+                  {topProducts.map((p) => (
+                    <div key={p.name} className="flex items-center justify-between gap-2">
+                      <span className="text-sm text-foreground truncate">{p.name}</span>
+                      <span className="text-sm font-medium text-muted-foreground flex-shrink-0">
+                        {formatCurrency(p.total)}
+                      </span>
+                    </div>
+                  ))}
+                </div>
+                <p className="text-xs text-muted-foreground mt-3">
+                  Baseado nos itens identificados nas notas importadas por foto
+                </p>
               </Card>
             )}
 

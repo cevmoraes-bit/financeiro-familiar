@@ -3,7 +3,7 @@ import * as XLSX from 'xlsx';
 import * as pdfjsLib from 'pdfjs-dist';
 import pdfjsWorkerUrl from 'pdfjs-dist/build/pdf.worker.min.mjs?url';
 import { ParsedBill, ParsedFileResult } from './types';
-import { extractFieldsFromText } from './textExtract';
+import { extractFieldsFromText, extractItemsFromText } from './textExtract';
 import { hasKnownColumns, mapRowsToBills } from './rows';
 
 pdfjsLib.GlobalWorkerOptions.workerSrc = pdfjsWorkerUrl;
@@ -123,11 +123,15 @@ export async function parseFile(file: File): Promise<ParsedFileResult> {
     }
     if (ext === 'pdf' || mime === 'application/pdf') {
       const text = await extractPdfText(file);
-      return { bills: [extractFieldsFromText(text)], rawText: text, parseMethod: 'pdf' };
+      const bill = extractFieldsFromText(text);
+      bill.items = extractItemsFromText(text);
+      return { bills: [bill], rawText: text, parseMethod: 'pdf' };
     }
     if (mime.startsWith('image/') || IMAGE_EXTENSIONS.includes(ext)) {
       const text = await extractImageText(file);
-      return { bills: [extractFieldsFromText(text)], rawText: text, parseMethod: 'ocr' };
+      const bill = extractFieldsFromText(text);
+      bill.items = extractItemsFromText(text);
+      return { bills: [bill], rawText: text, parseMethod: 'ocr' };
     }
     if (ext === 'txt' || mime === 'text/plain') {
       const text = await file.text();

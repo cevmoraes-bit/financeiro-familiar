@@ -24,16 +24,18 @@ import {
   AlertDialogHeader,
   AlertDialogTitle,
 } from '@/components/ui/alert-dialog';
-import { TrendingUp, TrendingDown, Search, Trash2, Filter, Pencil, CheckCircle2 } from 'lucide-react';
+import { TrendingUp, TrendingDown, Search, Trash2, Filter, Pencil, CheckCircle2, ChevronDown, ChevronUp, ShoppingCart } from 'lucide-react';
 import { toast } from 'sonner';
 import { supabase } from '@/lib/supabase';
 import { useNavigate } from 'react-router-dom';
-import { Transaction } from '@/lib/transactions';
+import { Transaction, TransactionItem } from '@/lib/transactions';
 
 const Transactions = () => {
   const { user, loading: authLoading } = useAuth();
   const navigate = useNavigate();
   const [transactions, setTransactions] = useState<Transaction[]>([]);
+  const [itemsByTransaction, setItemsByTransaction] = useState<Record<number, TransactionItem[]>>({});
+  const [expandedId, setExpandedId] = useState<number | null>(null);
   const [loadingData, setLoadingData] = useState(true);
   const [searchTerm, setSearchTerm] = useState('');
   const [filterType, setFilterType] = useState<string>('all');
@@ -51,13 +53,43 @@ const Transactions = () => {
         .limit(500);
 
       if (error) throw error;
-      setTransactions((data as Transaction[]) || []);
+      const list = (data as Transaction[]) || [];
+      setTransactions(list);
+
+      if (list.length > 0) {
+        const { data: items, error: itemsError } = await supabase
+          .from('transaction_items')
+          .select('*')
+          .in('transaction_id', list.map((t) => t.id));
+        if (itemsError) throw itemsError;
+        const grouped: Record<number, TransactionItem[]> = {};
+        (items as TransactionItem[] | null)?.forEach((item) => {
+          (grouped[item.transaction_id] ||= []).push(item);
+        });
+        setItemsByTransaction(grouped);
+      } else {
+        setItemsByTransaction({});
+      }
     } catch (err) {
       console.error('Error fetching transactions:', err);
     } finally {
       setLoadingData(false);
     }
   }, []);
+
+  const handleDeleteItem = async (itemId: number, transactionId: number) => {
+    try {
+      const { error } = await supabase.from('transaction_items').delete().eq('id', itemId);
+      if (error) throw error;
+      setItemsByTransaction((prev) => ({
+        ...prev,
+        [transactionId]: (prev[transactionId] || []).filter((it) => it.id !== itemId),
+      }));
+    } catch (err) {
+      const message = err instanceof Error ? err.message : 'Erro ao remover item';
+      toast.error(message);
+    }
+  };
 
   useEffect(() => {
     if (user) {
@@ -309,6 +341,40 @@ const Transactions = () => {
                     </Button>
                   </div>
                 </div>
+
+                {itemsByTransaction[t.id]?.length > 0 && (
+                  <div className="mt-2 pt-2 border-t border-border">
+                    <button
+                      onClick={() => setExpandedId(expandedId === t.id ? null : t.id)}
+                      className="flex items-center gap-1.5 text-xs text-muted-foreground cursor-pointer hover:text-foreground"
+                    >
+                      <ShoppingCart className="w-3.5 h-3.5" />
+                      {itemsByTransaction[t.id].length} {itemsByTransaction[t.id].length === 1 ? 'item' : 'itens'}
+                      {expandedId === t.id ? <ChevronUp className="w-3.5 h-3.5" /> : <ChevronDown className="w-3.5 h-3.5" />}
+                    </button>
+                    {expandedId === t.id && (
+                      <div className="mt-2 space-y-1.5">
+                        {itemsByTransaction[t.id].map((item) => (
+                          <div key={item.id} className="flex items-center justify-between gap-2 text-xs">
+                            <span className="text-foreground truncate flex-1">
+                              {item.name}
+                              {item.quantity ? ` (${item.quantity}x)` : ''}
+                            </span>
+                            <span className="text-muted-foreground flex-shrink-0">{formatCurrency(item.total_price)}</span>
+                            <Button
+                              variant="ghost"
+                              size="icon"
+                              className="h-5 w-5 cursor-pointer text-muted-foreground hover:text-destructive flex-shrink-0"
+                              onClick={() => handleDeleteItem(item.id, t.id)}
+                            >
+                              <Trash2 className="w-3 h-3" />
+                            </Button>
+                          </div>
+                        ))}
+                      </div>
+                    )}
+                  </div>
+                )}
               </Card>
             ))}
           </div>

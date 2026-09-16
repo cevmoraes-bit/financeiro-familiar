@@ -1,3 +1,10 @@
+export interface ParsedItem {
+  name: string;
+  quantity?: number;
+  unitPrice?: number;
+  totalPrice: number;
+}
+
 export interface ParsedBill {
   beneficiary?: string;
   payer?: string;
@@ -6,6 +13,7 @@ export interface ParsedBill {
   description?: string;
   type?: 'expense' | 'income';
   alreadyPaid?: boolean;
+  items?: ParsedItem[];
 }
 
 export interface ParsedFileResult {

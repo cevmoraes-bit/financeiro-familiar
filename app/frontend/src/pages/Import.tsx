@@ -15,7 +15,7 @@ import {
   SelectTrigger,
   SelectValue,
 } from '@/components/ui/select';
-import { UploadCloud, FileText, AlertTriangle, ArrowLeft, Camera } from 'lucide-react';
+import { UploadCloud, FileText, AlertTriangle, ArrowLeft, Camera, Plus, Trash2 } from 'lucide-react';
 import { toast } from 'sonner';
 import { supabase } from '@/lib/supabase';
 import { parseFile } from '@/lib/import/parsers';
@@ -27,6 +27,14 @@ type Stage = 'upload' | 'review-single' | 'review-multi';
 type TxType = 'expense' | 'income';
 type TxStatus = 'paid' | 'pending';
 
+interface ItemRow {
+  id: string;
+  name: string;
+  quantity: string;
+  unitPrice: string;
+  totalPrice: string;
+}
+
 interface SingleForm {
   type: TxType;
   status: TxStatus;
@@ -36,7 +44,13 @@ interface SingleForm {
   amount: string;
   description: string;
   categoryName: string;
+  items: ItemRow[];
 }
+
+let itemIdCounter = 0;
+const newItemId = () => `item-${Date.now()}-${itemIdCounter++}`;
+
+const emptyItemRow = (): ItemRow => ({ id: newItemId(), name: '', quantity: '', unitPrice: '', totalPrice: '' });
 
 interface MultiRow {
   id: string;
@@ -69,6 +83,13 @@ const buildSingleForm = (bill: ParsedBill, extraText: string): SingleForm => {
     amount: bill.amount ? String(bill.amount) : '',
     description: bill.description || '',
     categoryName,
+    items: (bill.items || []).map((item) => ({
+      id: newItemId(),
+      name: item.name,
+      quantity: item.quantity !== undefined ? String(item.quantity) : '',
+      unitPrice: item.unitPrice !== undefined ? String(item.unitPrice) : '',
+      totalPrice: String(item.totalPrice),
+    })),
   };
 };
 
@@ -192,25 +213,50 @@ const Import = () => {
       toast.error('Informe a data de vencimento');
       return;
     }
+    const validItems = form.items.filter((it) => it.name.trim() && parseFloat(it.totalPrice.replace(',', '.')) > 0);
+    if (form.items.some((it) => it.name.trim() && !(parseFloat(it.totalPrice.replace(',', '.')) > 0))) {
+      toast.error('Informe o valor de cada item ou remova a linha vazia');
+      return;
+    }
+
     setBusy(true);
     try {
       const match = categoriesFor(form.type).find((c) => c.name === form.categoryName);
-      const { error } = await supabase.from('transactions').insert({
-        user_id: user.id,
-        type: form.type,
-        amount,
-        category: form.categoryName || 'Outros',
-        category_id: match?.id ?? null,
-        description: form.description || null,
-        date: form.dueDate,
-        due_date: form.dueDate,
-        beneficiary: form.beneficiary || null,
-        payer: form.payer || null,
-        status: form.status,
-        source: 'import',
-        attachment_url: attachmentPath,
-      });
+      const { data: inserted, error } = await supabase
+        .from('transactions')
+        .insert({
+          user_id: user.id,
+          type: form.type,
+          amount,
+          category: form.categoryName || 'Outros',
+          category_id: match?.id ?? null,
+          description: form.description || null,
+          date: form.dueDate,
+          due_date: form.dueDate,
+          beneficiary: form.beneficiary || null,
+          payer: form.payer || null,
+          status: form.status,
+          source: 'import',
+          attachment_url: attachmentPath,
+        })
+        .select('id')
+        .single();
       if (error) throw error;
+
+      if (validItems.length > 0) {
+        const { error: itemsError } = await supabase.from('transaction_items').insert(
+          validItems.map((it) => ({
+            user_id: user.id,
+            transaction_id: inserted.id,
+            name: it.name.trim(),
+            quantity: it.quantity ? parseFloat(it.quantity.replace(',', '.')) : null,
+            unit_price: it.unitPrice ? parseFloat(it.unitPrice.replace(',', '.')) : null,
+            total_price: parseFloat(it.totalPrice.replace(',', '.')),
+          }))
+        );
+        if (itemsError) throw itemsError;
+      }
+
       toast.success('Transação importada com sucesso!');
       resetAll();
       navigate('/transactions');
@@ -219,6 +265,18 @@ const Import = () => {
     } finally {
       setBusy(false);
     }
+  };
+
+  const updateItem = (id: string, patch: Partial<ItemRow>) => {
+    setForm((f) => (f ? { ...f, items: f.items.map((it) => (it.id === id ? { ...it, ...patch } : it)) } : f));
+  };
+
+  const addItem = () => {
+    setForm((f) => (f ? { ...f, items: [...f.items, emptyItemRow()] } : f));
+  };
+
+  const removeItem = (id: string) => {
+    setForm((f) => (f ? { ...f, items: f.items.filter((it) => it.id !== id) } : f));
   };
 
   const handleSaveMulti = async () => {
@@ -438,6 +496,54 @@ const Import = () => {
             <div className="space-y-2">
               <Label>Descrição</Label>
               <Input value={form.description} onChange={(e) => setForm({ ...form, description: e.target.value })} placeholder="Opcional" />
+            </div>
+
+            <div className="space-y-2">
+              <div className="flex items-center justify-between">
+                <Label>Itens da nota (opcional)</Label>
+                <Button type="button" variant="ghost" size="sm" className="h-7 px-2 cursor-pointer" onClick={addItem}>
+                  <Plus className="w-3.5 h-3.5 mr-1" /> Item
+                </Button>
+              </div>
+              {form.items.length === 0 ? (
+                <p className="text-xs text-muted-foreground">
+                  Nenhum item identificado. Útil para saber onde o dinheiro do mercado está indo — adicione manualmente se quiser.
+                </p>
+              ) : (
+                <div className="space-y-2">
+                  {form.items.map((item) => (
+                    <div key={item.id} className="flex items-center gap-1.5">
+                      <Input
+                        value={item.name}
+                        onChange={(e) => updateItem(item.id, { name: e.target.value })}
+                        placeholder="Produto"
+                        className="flex-1"
+                      />
+                      <Input
+                        value={item.quantity}
+                        onChange={(e) => updateItem(item.id, { quantity: e.target.value })}
+                        placeholder="Qtd"
+                        className="w-16"
+                      />
+                      <Input
+                        value={item.totalPrice}
+                        onChange={(e) => updateItem(item.id, { totalPrice: e.target.value })}
+                        placeholder="Valor"
+                        className="w-24"
+                      />
+                      <Button
+                        type="button"
+                        variant="ghost"
+                        size="icon"
+                        className="h-9 w-9 cursor-pointer text-muted-foreground hover:text-destructive flex-shrink-0"
+                        onClick={() => removeItem(item.id)}
+                      >
+                        <Trash2 className="w-3.5 h-3.5" />
+                      </Button>
+                    </div>
+                  ))}
+                </div>
+              )}
             </div>
 
             <div className="space-y-2">

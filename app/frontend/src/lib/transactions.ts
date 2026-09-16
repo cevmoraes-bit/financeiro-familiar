@@ -1,3 +1,12 @@
+export interface TransactionItem {
+  id: number;
+  transaction_id: number;
+  name: string;
+  quantity: number | null;
+  unit_price: number | null;
+  total_price: number;
+}
+
 export interface Transaction {
   id: number;
   type: 'expense' | 'income';

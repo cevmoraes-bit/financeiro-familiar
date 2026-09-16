@@ -1,4 +1,4 @@
-import { ParsedBill } from './types';
+import { ParsedBill, ParsedItem } from './types';
 
 export function parseBRCurrency(raw: string): number | undefined {
   const cleaned = raw.replace(/r\$/i, '').trim();
@@ -70,4 +70,61 @@ export function extractFieldsFromText(text: string): ParsedBill {
   }
 
   return result;
+}
+
+const ITEM_LINE_BLOCKLIST =
+  /total|subtotal|troco|desconto|acrescimo|forma de pagamento|dinheiro|cartao|credito|debito|\bpix\b|cnpj|cpf|endereco|telefone|\bcupom\b|nfc-?e|chave de acesso|consumidor|obrigado|volte sempre|codigo|protocolo|autorizacao|tributos|\bibpt\b|\bicms\b|operacao|extrato|imposto|valor pago|valor total|\bnumero\b|\bdata\b|\bhora\b|\bcaixa\b|operador|\bloja\b|filial|qtde?\.?\s*itens|itens\s*:/;
+
+function parseItemLine(line: string): ParsedItem | null {
+  const trimmed = line.trim();
+  if (trimmed.length < 4 || trimmed.length > 100) return null;
+
+  const normalized = trimmed
+    .normalize('NFD')
+    .replace(/[̀-ͯ]/g, '')
+    .toLowerCase();
+  if (ITEM_LINE_BLOCKLIST.test(normalized)) return null;
+
+  const numberMatches = [...trimmed.matchAll(/\d{1,3}(?:\.\d{3})*,\d{2}|\d+,\d{2}/g)];
+  if (numberMatches.length === 0) return null;
+
+  const last = numberMatches[numberMatches.length - 1];
+  const totalPrice = parseBRCurrency(last[0]);
+  if (totalPrice === undefined || totalPrice <= 0 || totalPrice > 50000) return null;
+
+  // Only trust a quantity when it's unambiguously a "qty UN x" column (not a
+  // package-size mention inside the product name, e.g. "ARROZ 5KG").
+  let quantity: number | undefined;
+  const qtyXMatch = trimmed.match(/(\d+(?:[.,]\d+)?)\s*(?:un|und|unid|kg|lt|cx|pc|pct)\b\s*[x×]/i);
+  if (qtyXMatch) {
+    quantity = parseFloat(qtyXMatch[1].replace(',', '.'));
+  }
+
+  const cutIndex = qtyXMatch?.index ?? last.index ?? trimmed.length;
+  let namePart = trimmed.slice(0, cutIndex).trim();
+  namePart = namePart.replace(/^\d{1,6}\s*[-.]?\s*/, '');
+  namePart = namePart.replace(/[-–—.:x×]+$/i, '').trim();
+  namePart = namePart.replace(/\s{2,}/g, ' ');
+  if (namePart.length < 3 || /^\d+$/.test(namePart)) return null;
+
+  let unitPrice: number | undefined;
+  if (numberMatches.length >= 2) {
+    const candidate = parseBRCurrency(numberMatches[numberMatches.length - 2][0]);
+    if (candidate !== undefined && quantity && Math.abs(candidate * quantity - totalPrice) < 0.05) {
+      unitPrice = candidate;
+    }
+  }
+
+  return { name: namePart, quantity, unitPrice, totalPrice };
+}
+
+export function extractItemsFromText(text: string): ParsedItem[] {
+  const lines = text.split(/\n+/);
+  const items: ParsedItem[] = [];
+  for (const line of lines) {
+    const item = parseItemLine(line);
+    if (item) items.push(item);
+    if (items.length >= 40) break;
+  }
+  return items;
 }
